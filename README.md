@@ -56,7 +56,9 @@ Padrões observados nos scripts:
 
 | Arquivo | Conteúdo | Granularidade |
 |---|---|---|
+| `<Submission>__<EXP>.rds` (ex.: `data/xco2_pre_processed/Ames__IS.rds`) | XCO2 observado + XCO2 simulado nesse `<EXP>` | 1 linha por sondagem |
 | `ensemble__<EXP>.rds` (ex.: `data/xco2_pre_processed/ensemble/ensemble__IS.rds`) | XCO2 observado + média e desvio do ensemble simulado do experimento `<EXP>` | 1 linha por sondagem |
+| `<Submission>__<EXP>.rds` (ex.: `data/Fluxes_MIP_completo/Ames__IS.rds`) | `net_flux`  do `<Submission>` para o experimento `<EXP>` | 1 linha por célula × mês |
 | `EnsMean__<EXP>.rds` (ex.: `data/Fluxes_MIP_completo/EnsMean__LNLGIS.rds`) | `net_flux` médio do ensemble para o experimento `<EXP>` | 1 linha por célula × mês |
 | `EnsStd__<EXP>.rds` (ex.: `data/Fluxes_MIP_completo/EnsStd__LNLGIS.rds`) | desvio padrão entre membros do `net_flux` do experimento `<EXP>` (candidato a `ref_sigma`) | 1 linha por célula × mês |
 | `comparison.rds` | saída de `agg_xco2_flux()`: estimado + `net_flux` | 1 linha por célula × mês |
