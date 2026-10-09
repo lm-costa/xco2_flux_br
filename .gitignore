@@ -4,7 +4,8 @@
 .httr-oauth
 .DS_Store
 .quarto
-data-raw/
+data-raw/*
+!data-raw/.gitkeep
 
 .RData
 .positai
