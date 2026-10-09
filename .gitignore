@@ -6,6 +6,7 @@
 .quarto
 data-raw/*
 !data-raw/.gitkeep
-
+data/Fluxes_MIP
+data/fluxes_MIP_std
 .RData
 .positai
