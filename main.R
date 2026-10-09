@@ -1,31 +1,63 @@
+############################################
+#   0. loading functions and libraries     #
+############################################
+
 purrr::map(list.files('r',full.names = T),source)
+setup_packages()
 south_file <- list.files('data-raw/South_America/',pattern = 'shp',full.names = T)
 south_america <- sf::read_sf(south_file[1])
 
+############################################
+#       1. Pre - processesing              #
+############################################
 
+# YOU DON'T NEED TO RUN THIS SECTION EVERYTIME
+# ALSO, ALL PRE PROCESSED DATA ARE AVAILABLE AT DATA FOLDER
+
+## XCO2 submodel and expirement extraction considering a geometry
 
 mip_extractor(
-  nc_file = 'data-raw/OCO2.nc',
-  out_dir = 'data/xco2_pre_processed',
-  geometry = geobr::read_country(year = 2025),
+  nc_file = 'data-raw/OCO2.nc', # raw data from <https://gml.noaa.gov/ccgg/OCO2_v11mip/release_downloads.php>
+  out_dir = 'data/xco2_pre_processed', #output folder
+  geometry = geobr::read_country(year = 2025), # geometry used
 
 )
 
+## ensemble of XCO2 data by experiments
 mip_ensemble(
-  'data/xco2_pre_processed',
-  'IS'
+  in_dir = 'data/xco2_pre_processed',
+  experiments = 'IS'
 )
 
+## Flux submodel and expirement extraction considering a geometry
+df_flux <- flux_extractor(
+  in_dir      = 'data-raw/OCO2_v11MIP_gridded_fluxes_all_20260729.v2r3',
+  out_dir     = "data/Fluxes_MIP",
+  geometry    = geobr::read_country(year = 2025),
+  submissions = "EnsMean",
+  experiments = "LNLGIS"
+)
+
+df_flux_std <- flux_extractor('data-raw/OCO2_v11MIP_gridded_fluxes_all_20260729.v2r3',
+                              "data/fluxes_MIP_std",
+                              geometry = geobr::read_country(year = 2025),
+                              submissions = "EnsStd",
+                              experiments = "LNLGIS")
+
+df_flux <- readr::read_rds(df_flux) # or you can insert the path directly. e.g: 'data/Fluxes_MIP_completo/<Submission>__<Exp>.rds
+
+df_std <- readRDS(df_flux_std) |> # or you can insert the path directly. e.g: 'data/Fluxes_MIP_completo/<Submission>__<Exp>.rds
+  dplyr::transmute(lon = round(lon, 4), lat = round(lat, 4),
+                   year, month, net_flux_sd = net_flux)
 
 #####
-library(tidyverse)
 
 df <- readr::read_rds(
   list.files('data/xco2_pre_processed/ensemble',
              full.names = T)
 )
 
-
+## general view
 df |>
   sample_n(1000) |>
   ggplot(
@@ -33,7 +65,9 @@ df |>
   )+
   geom_point()
 
-
+############################################
+#       2. Delta and total uncertanty      #
+############################################
 df_n <- df |>
   #rowwise() |>
   mutate(
@@ -70,7 +104,9 @@ df_n |>
   ggplot2::theme_bw()+
   ggplot2::labs(x='',y=expression(Delta~'Xco'[2]~' (ppm)'),fill='' )
 
-#####
+############################################
+#       3. Fluxes estimative               #
+############################################
 
 df_n <- fco2_from_delta(
   df_n,
@@ -80,41 +116,10 @@ df_n <- fco2_from_delta(
   tau_days = 30
 )
 
-df_n
 
-#####
-
-df_flux <- flux_extractor(
-  in_dir      = 'data-raw/OCO2_v11MIP_gridded_fluxes_all_20260729.v2r3',
-  out_dir     = "data/Fluxes_MIP",
-  geometry    = geobr::read_country(year = 2025),
-  submissions = "EnsMean",
-  experiments = "LNLGIS"
-)
-
-df_flux_std <- flux_extractor('data-raw/OCO2_v11MIP_gridded_fluxes_all_20260729.v2r3',
-                         "data/fluxes_MIP_std",
-                         geometry = geobr::read_country(year = 2025),
-                         submissions = "EnsStd",
-                         experiments = "LNLGIS")
-
-df_flux <- readr::read_rds(df_flux)
-
-df_std <- readRDS(df_flux_std) |>
-  dplyr::transmute(lon = round(lon, 4), lat = round(lat, 4),
-                   year, month, net_flux_sd = net_flux)
-
-df_flux |>
-  filter(month==1) |>
-  ggplot(
-    aes(x=lon,y=lat,fill=net_flux)
-  )+
-  geom_raster()
-
-
-
-
-####
+############################################
+# 4. Aggregation of OCO-2 to MIP 1deg      #
+############################################
 
 df_comp <- agg_xco2_flux(
   df_n,
@@ -138,13 +143,21 @@ df_comp <- dplyr::left_join(
   )
 
 
-#####
+############################################
+#           reading biomes                 #
+############################################
+
 biomas   <- geobr::read_biomes(year = 2019)
 biomas <- biomas |>
   filter(
     name_biome!='Sistema Costeiro'
   )
 
+############################################
+# 5. Compare fluxes estimated with MIP     #
+############################################
+
+### temporal
 
 res <- compare_flux(
   df_comp |> filter(
@@ -171,7 +184,7 @@ res$plots$scatter; res$plots$balance; res$plots$monthly;res$plots$balance_year  
 
 save_flux_plots(res, dir = "figs/")                       # salva PNGs
 
-####
+#### Spatial
 
 
 out <- map_flux_annual(df_comp, biomes = biomas,
@@ -190,7 +203,9 @@ out$maps$rmse
 save_flux_maps(out, "figs/")
 
 
-##### BETA
+############################################################
+# 5.1 Compare fluxes estimated with MIP and forme beta     #
+############################################################
 
 dfall   <- readxl::read_xlsx("data/beta_significant.xlsx")   # ou o dfall do seu loop
 res <-  compare_beta(dfall, df_comp, biomes = biomas, maps = TRUE,
