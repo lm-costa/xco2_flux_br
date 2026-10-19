@@ -361,3 +361,12 @@ saveRDS(mm, "output/compare_models.rds")
 plot_models(mm, "figs_manuscript/supp_model_by_model.png")
 plot_biome_scatter(res$balance_year, "figs_manuscript/supp_biome_scatter.png")
 
+# 8b. Médias mensais e ciclo sazonal, modelo a modelo (g C m-2 d-1) -----------------------------------------------------------------
+#     monthly = grupo x ano x mês; seasonal = grupo x mês do calendário; r e p (Pearson) pooled nos 6 biomas
+mmm <- compare_models_monthly(res$cells, "data/Fluxes_MIP_completo", experiment = "LNLGIS")
+mmm$metrics
+saveRDS(mmm, "output/compare_models_monthly.rds")
+met <- mmm$metrics
+plot_models_flux(mmm$monthly,  met[met$escala == "mensal"  & met$nivel == "biomas (pooled)", ], "figs_manuscript/supp_model_monthly.png")
+plot_models_flux(mmm$seasonal, met[met$escala == "sazonal" & met$nivel == "biomas (pooled)", ], "figs_manuscript/supp_model_seasonal.png", pt_size = 1.6)
+plot_seasonal_cycle(mmm$seasonal, "figs_manuscript/supp_seasonal_cycle.png")
