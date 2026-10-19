@@ -2,8 +2,17 @@
 #   0. loading functions and libraries     #
 ############################################
 
+biomas   <- geobr::read_biomes(year = 2019)
+
+
 purrr::map(list.files('r',full.names = T),source)
 setup_packages()
+
+biomas <- biomas |>
+  filter(
+    name_biome!='Sistema Costeiro'
+  )
+
 south_file <- list.files('data-raw/South_America/',pattern = 'shp',full.names = T)
 south_america <- sf::read_sf(south_file[1])
 
@@ -143,15 +152,6 @@ df_comp <- dplyr::left_join(
   )
 
 
-############################################
-#           reading biomes                 #
-############################################
-
-biomas   <- geobr::read_biomes(year = 2019)
-biomas <- biomas |>
-  filter(
-    name_biome!='Sistema Costeiro'
-  )
 
 ############################################
 # 5. Compare fluxes estimated with MIP     #
