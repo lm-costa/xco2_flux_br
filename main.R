@@ -184,9 +184,10 @@ res <- compare_flux(
 res$metrics          # Brasil + biomas: bias, rmse, r, slope...
 res$balance_total    # balanço acumulado (Tg C): estimado x net_flux
 res$balance_year     # por ano
-res$flux_monthly     # fluxo médio mensal (g C m-2 d-1) por grupo
+res$flux_monthly |> view()     # fluxo médio mensal (g C m-2 d-1) por grupo
 res$plots$scatter; res$plots$balance; res$plots$monthly;res$plots$balance_year   # por bioma, em inglês
 
+res |> readr::write_rds('output/metrics_temporal.rds')
 
 save_flux_plots(res, dir = "figs/")                       # salva PNGs
 
