@@ -39,23 +39,27 @@ mip_ensemble(
 )
 
 ## Flux submodel and expirement extraction considering a geometry
-df_flux <- flux_extractor(
-  in_dir      = 'data-raw/OCO2_v11MIP_gridded_fluxes_all_20260729.v2r3',
-  out_dir     = "data/Fluxes_MIP",
-  geometry    = geobr::read_country(year = 2025),
-  submissions = "EnsMean",
-  experiments = "LNLGIS"
-)
 
-df_flux_std <- flux_extractor('data-raw/OCO2_v11MIP_gridded_fluxes_all_20260729.v2r3',
-                              "data/fluxes_MIP_std",
-                              geometry = geobr::read_country(year = 2025),
-                              submissions = "EnsStd",
-                              experiments = "LNLGIS")
+# df_flux <- flux_extractor(
+#   in_dir      = 'data-raw/OCO2_v11MIP_gridded_fluxes_all_20260729.v2r3',
+#   out_dir     = "data/Fluxes_MIP",
+#   geometry    = geobr::read_country(year = 2025),
+#   submissions = "EnsMean",
+#   experiments = "LNLGIS"
+# )
+#
+# df_flux_std <- flux_extractor('data-raw/OCO2_v11MIP_gridded_fluxes_all_20260729.v2r3',
+#                               "data/fluxes_MIP_std",
+#                               geometry = geobr::read_country(year = 2025),
+#                               submissions = "EnsStd",
+#                               experiments = "LNLGIS")
+
+df_flux <- list.files('data/Fluxes_MIP',full.names = T)
+df_flux_std <- list.files('data/Fluxes_MIP_std',full.names = T)
 
 df_flux <- readr::read_rds(df_flux) # or you can insert the path directly. e.g: 'data/Fluxes_MIP_completo/<Submission>__<Exp>.rds
 
-df_std <- readRDS(df_flux_std) |> # or you can insert the path directly. e.g: 'data/Fluxes_MIP_completo/<Submission>__<Exp>.rds
+df_std <- readr::read_rds(df_flux_std) |> # or you can insert the path directly. e.g: 'data/Fluxes_MIP_completo/<Submission>__<Exp>.rds
   dplyr::transmute(lon = round(lon, 4), lat = round(lat, 4),
                    year, month, net_flux_sd = net_flux)
 
