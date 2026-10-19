@@ -5,17 +5,39 @@
 #'
 #'   n_dry  = (psurf*100/g - tcwv) / M_dry          [mol ar seco m-2]
 #'   dM     = delta * 1e-6 * n_dry * M_C            [g C m-2]
+#'   dM     = flux_fraction * dM                    [fração atribuída ao fluxo local]
 #'   fco2   = dM / tau_days                         [g C m-2 d-1]
 #'
 #' @param df         data.frame com as colunas de delta, psurf e tcwv.
+#'
 #' @param delta      Nome da coluna do delta (ppm). Padrão "delta".
+#'
 #' @param psurf      Nome da coluna de pressão de superfície (hPa).
+#'
 #' @param tcwv       Nome da coluna de vapor d'água total da coluna (kg m-2).
+#'
 #' @param sigma_delta Nome da coluna de incerteza do delta (ppm), ex.: "total_erro".
 #'                   NULL = não propaga incerteza.
 #' @param tau_days   Tempo de residência em dias (padrão 1).
+#'
 #' @param sigma_tau_days Incerteza (1 desvio padrão) do tau, em dias. NULL = tau exato.
+#'
+#' @param flux_fraction Fração (0 a 1) do delta atribuída ao fluxo local (atribuição local),
+#'                   por exemplo 0.2 se só ~20% do excesso de CO2 observado vem do fluxo da
+#'                   célula e o restante vem de outras fontes (transporte, parte da
+#'                   atmosfera que o IS não remove). NÃO é a fração de massa da camada
+#'                   inferior: o delta já é média da coluna, então o inventário correto é
+#'                   delta * coluna inteira, e usar a massa de uma camada contaria a
+#'                   diluição duas vezes. Padrão 1 = todo o delta é fluxo local.
+#'                   Escala o fluxo linearmente: fco2 ∝ flux_fraction / tau_days, então
+#'                   fração e tau não são separáveis pelos dados. Só vale para o método
+#'                   "massa"; o SPT não é alterado.
+#' @param sigma_flux_fraction Incerteza (1 desvio padrão) da fração. NULL = exata. É um
+#'                   erro sistemático (igual para todas as sondagens); para uma
+#'                   sensibilidade, o mais seguro é rodar com várias frações.
+#'
 #' @param method     "massa" (balanço de massa com psurf/tcwv), "SPT" ou "ambos".
+#'
 #' @param spt_height,spt_mw,spt_vmol,spt_scale Constantes do SPT:
 #'                   spt = spt_height * delta * (spt_mw/spt_vmol) * spt_scale
 #'                   (padrão: 10000 * delta * (44/25) * 1e-3). Gera `spt`
@@ -23,6 +45,7 @@
 #'
 #' @return df com as colunas novas: k_gC_ppm (g C m-2 por ppm), dM_gC_m2,
 #'         fco2 (g C m-2 d-1) e, se sigma_delta informado, sigma_f.
+
 fco2_from_delta <- function(df,
                             delta          = "delta",
                             psurf          = "psurf",
@@ -30,6 +53,8 @@ fco2_from_delta <- function(df,
                             sigma_delta    = NULL,
                             tau_days       = 1,
                             sigma_tau_days = NULL,
+                            flux_fraction   = 1,
+                            sigma_flux_fraction = NULL,
                             method         = c("ambos", "massa", "SPT"),
                             spt_height     = 10000,
                             spt_mw         = 44,
@@ -54,14 +79,19 @@ fco2_from_delta <- function(df,
     # g C m-2 por ppm de delta
     df$k_gC_ppm <- 1e-6 * n_dry * M_C
 
-    df$dM_gC_m2 <- df[[delta]] * df$k_gC_ppm                   # g C m-2
+    df$flux_fraction <- flux_fraction
+
+    df$dM_gC_m2 <- flux_fraction * df[[delta]] * df$k_gC_ppm                   # g C m-2
     df$fco2     <- df$dM_gC_m2 / tau_days                      # g C m-2 d-1
 
     if (!is.null(sigma_delta)) {
-      # σ_f² = (k σ_delta / tau)² + (fco2 σ_tau / tau)²
-      var_f <- (df$k_gC_ppm * df[[sigma_delta]] / tau_days)^2
+      # σ_f² = (f k σ_delta / tau)² + (fco2 σ_tau / tau)² + (fco2 σ_f / f)²
+      var_f <- (flux_fraction * df$k_gC_ppm * df[[sigma_delta]] / tau_days)^2
       if (!is.null(sigma_tau_days)) {
         var_f <- var_f + (df$fco2 * sigma_tau_days / tau_days)^2
+      }
+      if (!is.null(sigma_flux_fraction)) {
+        var_f <- var_f + (df$fco2 * sigma_flux_fraction / flux_fraction)^2
       }
       df$sigma_f <- sqrt(var_f)
     }
@@ -85,6 +115,16 @@ fco2_from_delta <- function(df,
 # Exemplo de uso
 # ---------------------------------------------------------------------------
 # df_n <- fco2_from_delta(df_n, sigma_delta = "total_erro", tau_days = 1)
+#
+# # 20% do delta atribuído ao fluxo local (com incerteza de 0.05 na fração):
+# df_n <- fco2_from_delta(df_n, sigma_delta = "total_erro", tau_days = 1,
+#                         flux_fraction = 0.2, sigma_flux_fraction = 0.05)
+#
+# # Sensibilidade à fração:
+# for (f in c(0.1, 0.2, 0.3, 1)) {
+#   tmp <- fco2_from_delta(df_n, sigma_delta = "total_erro", flux_fraction = f)
+#   cat("f =", f, "| fco2 médio =", mean(tmp$fco2, na.rm = TRUE), "\n")
+# }
 #
 # # Sensibilidade ao tau:
 # for (tau in c(0.5, 1, 2, 3)) {

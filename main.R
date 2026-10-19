@@ -126,7 +126,9 @@ df_n <- fco2_from_delta(
   delta='delta',
   sigma_delta = 'sigma',
   method = 'massa',
-  tau_days = 30
+  tau_days = 2.5,
+  flux_fraction = .2
+
 )
 
 
