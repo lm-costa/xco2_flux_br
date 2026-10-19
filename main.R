@@ -231,22 +231,28 @@ ggplot2::ggsave("figs/flux_latitudinal_profile.png", lat$plot,
 # 5.1 Compare fluxes estimated with MIP and forme beta     #
 ############################################################
 
-dfall   <- readxl::read_xlsx("data/beta_significant.xlsx")   # ou o dfall do seu loop
-res <-  compare_beta(dfall, df_comp, biomes = biomas, maps = TRUE,
-                     map_args = list(south_america = south_america, map_theme = map_theme),
-                     unit='repo')
-res$metrics     # Brasil e biomas, três pares
-res$plots       # scatter_brazil, scatter_beta_ref, scatter_beta_est, scatter_est_ref
+# dfall   <- readxl::read_xlsx("data/beta_significant.xlsx")   # ou o dfall do seu loop
+# res <-  compare_beta(dfall, df_comp, biomes = biomas, maps = TRUE,
+#                      map_args = list(south_america = south_america, map_theme = map_theme),
+#                      unit='repo')
+# res$metrics     # Brasil e biomas, três pares
+# res$plots       # scatter_brazil, scatter_beta_ref, scatter_beta_est, scatter_est_ref
+#
+#
+# res$maps
+#
+# bal <- balance_beta(res)            # aceita a saída da compare_beta (ou o data frame res$pairs)
+# bal$year                            # Tg C por grupo × ano (beta, estimado, net_flux)
+# bal$total                           # Tg C por grupo (soma de todas as células e anos)
+# bal$plots$balance_year              # 3 barras por ano, uma facet por Brasil/bioma
+# bal$plots$balance_total             # 3 barras por grupo
+# save_beta_balance(bal, "figs_beta/")
+#
+# save_beta_plots(res, "figs_beta/")
+# save_beta_maps(res, "figs_beta_maps/")
+
 
 
 res$maps
 
-bal <- balance_beta(res)            # aceita a saída da compare_beta (ou o data frame res$pairs)
-bal$year                            # Tg C por grupo × ano (beta, estimado, net_flux)
-bal$total                           # Tg C por grupo (soma de todas as células e anos)
-bal$plots$balance_year              # 3 barras por ano, uma facet por Brasil/bioma
-bal$plots$balance_total             # 3 barras por grupo
-save_beta_balance(bal, "figs_beta/")
 
-save_beta_plots(res, "figs_beta/")
-save_beta_maps(res, "figs_beta_maps/")
