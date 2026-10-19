@@ -214,6 +214,18 @@ out |> readr::write_rds('output/metrics_spatial.rds')
 
 save_flux_maps(out, "figs/")
 
+#### Latitudinal distribution (one line per year)
+
+lat <- plot_lat_profile(out$annual,
+                        bin = 2,          # largura da faixa de latitude (graus)
+                        min_cells = 5,    # mínimo de células por faixa x ano
+                        min_months = 3,   # mínimo de meses pareados na célula x ano
+                        flip = TRUE)      # latitude no eixo y
+lat$plot                                  # estimado, MIP e diferença; linha preta = média dos anos
+lat$data                                  # média por faixa de latitude x ano x série
+ggplot2::ggsave("figs/flux_latitudinal_profile.png", lat$plot,
+                width = 12, height = 6, dpi = 300, bg = "white")
+
 
 ############################################################
 # 5.1 Compare fluxes estimated with MIP and forme beta     #
