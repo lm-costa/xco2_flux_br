@@ -252,7 +252,26 @@ ggplot2::ggsave("figs/flux_latitudinal_profile.png", lat$plot,
 # save_beta_maps(res, "figs_beta_maps/")
 
 
+############################################################
+# 6.  Compare fluxes estimated and from MIP with climate   #
+############################################################
 
-res$maps
+res_climatica <- compare_climate(df_comp,
+                       biomes = biomas,
+                       time_scale = "annual",
+                       data_dir = "data-raw/nasa_power",
+                       download = FALSE,
+                       out_dir = "data/nasa_power",   # salva o POWER mensal por célula, antes do match com df_comp
+                       map_args = list(
+                         south_america = south_america,
+                         map_theme = map_theme
+                         )
+                       )
+
+res_climatica$summary                # mediana de r por bioma, variável e fonte (estimado x MIP)
+res_climatica$pooled                 # r, rho, inclinação do scatter geral por bioma
+res_climatica$plots$prec             # scatter: fluxo x anomalia da precipitação, por bioma
+res_climatica$maps$temp              # mapa de r (estimado e MIP lado a lado) com a temperatura
+save_climate_plots(res_climatica, "figs_climate/")
 
 
