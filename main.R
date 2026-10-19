@@ -353,3 +353,11 @@ cmp_def  <- compare_disturbance(out$annual, prodes$cell,
 cmp_fire$pooled; cmp_fire$by_year; cmp_fire$within_cell; cmp_fire$classes; cmp_fire$robustness
 cmp_def$pooled;  cmp_def$by_year;  cmp_def$within_cell;  cmp_def$classes;  cmp_def$robustness
 
+# 8. Comparação modelo a modelo (OCO-2 MIP, experimento LNLGIS) e figuras suplementares ------------------------------------
+#    balanço anual por bioma x ano: cada grupo do MIP (x) contra o estimado (y), com r e p (Pearson)
+mm <- compare_models(res$cells, "data/Fluxes_MIP_completo", experiment = "LNLGIS")
+mm$metrics; mm$metrics_brasil
+saveRDS(mm, "output/compare_models.rds")
+plot_models(mm, "figs_manuscript/supp_model_by_model.png")
+plot_biome_scatter(res$balance_year, "figs_manuscript/supp_biome_scatter.png")
+
