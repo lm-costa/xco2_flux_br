@@ -239,3 +239,186 @@ prodes_aggregate <- function(layers = c("Amazônia"       = "prodes-amazon-nb:ye
   out
 }
 
+#' Mapas anuais de área queimada ou desmatamento agregados nas células do fluxo (escala em Mha)
+#'
+#' Um painel por ano (e, opcionalmente, o acumulado do período) com a área por célula de 1°, em Mha
+#' (1 Mha = 10 mil km2 = 1 milhão de hectares). Mesmo estilo de map_flux_annual(): tile `cartolight`,
+#' contorno da América do Sul, biomas, legenda dentro, seta norte e escala. Figuras em inglês, sem título.
+#'
+#' @param df         data.frame com lon, lat, year e a coluna `value` em km2 (por exemplo,
+#'                   `fire$annual` com `burned_km2` ou `prodes$cell` com `def_km2`). Linhas repetidas
+#'                   da mesma célula x ano (camadas de biomas diferentes) são somadas.
+#' @param value      Coluna em km2.
+#' @param label      Nome da grandeza na legenda (ex.: "Burned area", "Deforestation").
+#' @param years      Anos a mostrar. NULL = todos.
+#' @param cells      data.frame com lon e lat das células a desenhar (por exemplo `fire$land`). As que não
+#'                   aparecem em `df` num ano são desenhadas com 0 (em vez de ficarem sem cor). NULL = só
+#'                   as células presentes em `df`.
+#' @param coverage   data.frame com biome e year dos biomas x anos que têm dado no produto (por exemplo
+#'                   `prodes$total |> dplyr::filter(n_poly > 0)`). Os demais ficam sem cor (não são 0).
+#'                   Usa os nomes de bioma de `biome_col` em `biomes`; precisa de `cells` e `biomes`.
+#' @param biomes     sf com os biomas (geobr::read_biomes(year = 2019)). NULL = sem biomas.
+#' @param biome_col  Coluna com o nome do bioma.
+#' @param limits    Limites da escala em Mha para os painéis anuais, c(min, max). NULL = 0 até o
+#'                   percentil `q_max` dos valores (a mesma escala para todos os anos).
+#' @param q_max      Percentil usado como máximo da escala quando `limits` é NULL.
+#' @param palette    Opção viridis ("inferno", "magma", "viridis"...).
+#' @param total      Também gera o mapa do acumulado do período (escala própria).
+#' @param ncol       Colunas de painéis.
+#' @param res        Resolução da grade em graus (1 ou 2 valores). NULL = inferida.
+#' @param south_america,map_theme,basemap,exclude_biomes,xlim,ylim,decorations,biome_linewidth,biome_colour
+#'                   Como em map_flux_annual().
+#'
+#' @return lista: maps (annual, total), data (célula x ano com a coluna `Mha`), limits (em Mha).
+map_disturbance_annual <- function(df,
+                                   value          = "burned_km2",
+                                   label          = "Burned area",
+                                   years          = NULL,
+                                   cells          = NULL,
+                                   coverage       = NULL,
+                                   biomes         = NULL,
+                                   biome_col      = "name_biome",
+                                   limits         = NULL,
+                                   q_max          = 0.99,
+                                   palette        = "inferno",
+                                   total          = TRUE,
+                                   ncol           = 3,
+                                   res            = NULL,
+                                   south_america  = NULL,
+                                   map_theme      = NULL,
+                                   basemap        = TRUE,
+                                   exclude_biomes = "Sistema Costeiro",
+                                   xlim           = c(-75, -35),
+                                   ylim           = c(-35, 5.5),
+                                   decorations    = TRUE,
+                                   biome_linewidth = 0.5,
+                                   biome_colour   = "black") {
+  need <- c("lon", "lat", "year", value)
+  if (!all(need %in% names(df))) stop("df precisa de: ", paste(setdiff(need, names(df)), collapse = ", "))
+  d <- as.data.frame(df)
+  d$v <- d[[value]]
+  d <- d |>
+    dplyr::group_by(lon = round(lon, 4), lat = round(lat, 4), year) |>
+    dplyr::summarise(Mha = sum(v, na.rm = TRUE) / 1e4, .groups = "drop")
+  if (!is.null(years)) d <- d[d$year %in% years, ]
+  if (nrow(d) == 0) stop("Nenhuma linha depois do filtro de anos.")
+
+  # células sem registro viram zero (se `cells` for dado); com `coverage`, os biomas x anos sem
+  # dado no produto ficam NA (não desenhados) em vez de zero
+  if (!is.null(cells)) {
+    yrs <- sort(unique(d$year))
+    g <- merge(data.frame(lon = round(cells$lon, 4), lat = round(cells$lat, 4)), data.frame(year = yrs))
+    d <- merge(g, d, by = c("lon", "lat", "year"), all.x = TRUE)
+    d$Mha[is.na(d$Mha)] <- 0
+    if (!is.null(coverage)) {
+      if (is.null(biomes)) stop("`coverage` precisa de `biomes` para localizar o bioma de cada célula.")
+      s2_old <- sf::sf_use_s2(FALSE); on.exit(sf::sf_use_s2(s2_old), add = TRUE)
+      bb  <- sf::st_make_valid(sf::st_transform(biomes, 4326))
+      xy  <- unique(d[, c("lon", "lat")])
+      hit <- sf::st_intersects(sf::st_as_sf(xy, coords = c("lon", "lat"), crs = 4326), bb)
+      xy$biome <- as.character(sf::st_drop_geometry(bb)[[biome_col]])[
+        vapply(hit, function(i) if (length(i)) i[1] else NA_integer_, integer(1))]
+      d <- merge(d, xy, by = c("lon", "lat"))
+      ok <- paste(d$biome, d$year) %in% paste(coverage$biome, coverage$year)
+      d$Mha[!ok] <- NA_real_
+      d <- d[!is.na(d$Mha), setdiff(names(d), "biome")]
+    }
+  }
+  tot <- d |> dplyr::group_by(lon, lat) |> dplyr::summarise(Mha = sum(Mha), .groups = "drop")
+
+  has_gsp <- requireNamespace("ggspatial", quietly = TRUE)
+  step <- function(v) { v <- sort(unique(round(v, 4))); if (length(v) < 2) NA_real_ else min(diff(v)) }
+  if (is.null(res)) res <- c(step(d$lon), step(d$lat))
+  if (anyNA(res)) res <- c(1, 1)
+  if (length(res) == 1) res <- rep(res, 2)
+
+  if (is.null(south_america) && requireNamespace("rnaturalearth", quietly = TRUE)) {
+    south_america <- try(rnaturalearth::ne_countries(continent = "South America", returnclass = "sf"), silent = TRUE)
+    if (inherits(south_america, "try-error")) south_america <- NULL
+  }
+  b_draw <- NULL
+  if (!is.null(biomes)) {
+    b <- sf::st_make_valid(sf::st_transform(biomes, 4326))
+    b_draw <- b
+    if (!is.null(exclude_biomes) && biome_col %in% names(b))
+      b_draw <- b[!(as.character(b[[biome_col]]) %in% exclude_biomes), ]
+  }
+  no_year <- function(x) if (!is.null(x) && "year" %in% names(x)) x[, setdiff(names(x), "year")] else x
+  b_draw <- no_year(b_draw); south_america <- no_year(south_america)
+
+  base_layers <- list()
+  if (basemap && has_gsp)
+    base_layers <- c(base_layers, list(ggspatial::annotation_map_tile(type = "cartolight", progress = "none")))
+  if (!is.null(south_america))
+    base_layers <- c(base_layers, list(ggplot2::geom_sf(data = south_america, inherit.aes = FALSE,
+                                                        col = "grey", fill = "white")))
+  if (!is.null(b_draw))
+    base_layers <- c(base_layers, list(ggplot2::geom_sf(data = b_draw, inherit.aes = FALSE,
+                                                        col = "black", fill = "grey50")))
+  th_user <- if (is.function(map_theme)) map_theme() else map_theme
+  th_user <- if (is.null(th_user)) list() else if (inherits(th_user, "list")) th_user else list(th_user)
+  has_geom <- function(cls) any(vapply(th_user, function(x) inherits(x, "LayerInstance") &&
+                                         inherits(x$geom, cls), logical(1)))
+  top_border <- if (!is.null(b_draw))
+    list(ggplot2::geom_sf(data = b_draw, inherit.aes = FALSE, fill = NA,
+                          colour = biome_colour, linewidth = biome_linewidth))
+  deco <- list()
+  if (decorations && has_gsp) {
+    if (!has_geom("GeomNorthArrow"))
+      deco <- c(deco, list(ggspatial::annotation_north_arrow(location = "tr", which_north = "true",
+                                                             style = ggspatial::north_arrow_nautical(),
+                                                             height = grid::unit(1.2, "cm"), width = grid::unit(1.2, "cm"))))
+    if (!has_geom("GeomScaleBar"))
+      deco <- c(deco, list(ggspatial::annotation_scale(location = "bl", width_hint = 0.3,
+                                                       unit_category = "metric")))
+  }
+  legend_in <- if (utils::packageVersion("ggplot2") >= "3.5.0")
+    ggplot2::theme(legend.position = "inside", legend.position.inside = c(1, 0), legend.justification = c(1, 0))
+  else ggplot2::theme(legend.position = c(1, 0), legend.justification = c(1, 0))
+  th <- c(th_user, list(
+    ggplot2::theme(axis.text = ggplot2::element_text(size = 12),
+                   axis.title = ggplot2::element_text(size = 20),
+                   text = ggplot2::element_text(size = 20),
+                   legend.background = ggplot2::element_rect(fill = scales::alpha("white", 0.8), colour = NA)),
+    legend_in))
+  bar <- ggplot2::guide_colourbar(barheight = grid::unit(4, "cm"))
+  leg <- paste0(gsub(" ", "\n", label), "\n(Mha)")
+
+  build <- function(data, lim, facet) {
+    p <- ggplot2::ggplot(data, ggplot2::aes(lon, lat))
+    for (l in base_layers) p <- p + l
+    p <- p + ggplot2::geom_tile(ggplot2::aes(color = Mha, fill = Mha), width = res[1], height = res[2]) +
+      ggplot2::scale_color_viridis_c(option = palette, limits = lim, oob = scales::squish, name = leg, guide = bar) +
+      ggplot2::scale_fill_viridis_c(option = palette, limits = lim, oob = scales::squish, name = leg, guide = bar)
+    for (l in top_border) p <- p + l
+    if (facet) p <- p + ggplot2::facet_wrap(~ year, ncol = ncol)
+    for (l in deco) p <- p + l
+    p <- p + ggplot2::coord_sf(xlim = xlim, ylim = ylim, expand = FALSE,
+                               crs = sf::st_crs(4326), default_crs = sf::st_crs(4326)) +
+      ggplot2::scale_x_continuous(breaks = seq(-70, -40, by = 10)) +
+      ggplot2::scale_y_continuous(breaks = seq(-30, 0, by = 10)) +
+      ggplot2::labs(x = "Longitude", y = "Latitude") + ggplot2::theme_bw()
+    for (l in th) if (!is.null(l)) p <- p + l
+    p
+  }
+  q <- function(v) as.numeric(stats::quantile(v[v > 0], q_max, na.rm = TRUE))
+  lim_a <- if (!is.null(limits)) limits else c(0, q(d$Mha))
+  maps <- list(annual = build(d, lim_a, TRUE))
+  lim_t <- c(0, q(tot$Mha))
+  if (total) maps$total <- build(tot, lim_t, FALSE)
+  list(maps = maps, data = tibble::as_tibble(d), limits = list(annual = lim_a, total = lim_t))
+}
+
+#' Salva os mapas de map_disturbance_annual() em PNG: <prefix>_annual.png e <prefix>_total.png
+save_disturbance_maps <- function(res, dir = ".", prefix = "disturbance", dpi = 300,
+                                  panel = 6, ncol = 3) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  n <- length(unique(res$data$year)); nr <- ceiling(n / ncol)
+  ggplot2::ggsave(file.path(dir, paste0(prefix, "_annual.png")), res$maps$annual,
+                  width = panel * ncol, height = panel * nr, dpi = dpi, bg = "white", limitsize = FALSE)
+  if (!is.null(res$maps$total))
+    ggplot2::ggsave(file.path(dir, paste0(prefix, "_total.png")), res$maps$total,
+                    width = panel * 1.4, height = panel * 1.2, dpi = dpi, bg = "white")
+  invisible(dir)
+}
+

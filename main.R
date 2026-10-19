@@ -307,3 +307,35 @@ prodes_cov <- prodes$total |>
                 !(biome %in% c("Caatinga", "Mata Atlântica", "Pampa", "Pantanal") & year == 2015)) |>
   dplyr::select(biome, year)
 
+# 7.4 Mapas anuais de área queimada e de desmatamento nas células de 1° (escala em Mha; 1 Mha = 10 mil km2)
+m_fire <- map_disturbance_annual(fire$annual,
+                                 value = "burned_km2", label = "Burned area",
+                                 years = 2015:2023,
+                                 cells = fire$land,              # células sem registro de fogo entram como 0
+                                 biomes = biomas,
+                                 south_america = south_america,
+                                 map_theme = map_theme)
+m_fire$maps$annual     # um painel por ano, mesma escala (0 até o percentil 99, em Mha)
+m_fire$maps$total      # acumulado 2015-2023
+save_disturbance_maps(m_fire, "figs_disturbance/", prefix = "fire")
+
+m_def <- map_disturbance_annual(prodes$cell,
+                                value = "def_km2", label = "Deforestation",
+                                years = 2015:2023,
+                                cells = fire$land,              # mesma grade de células (dentro dos biomas)
+                                coverage = prodes_cov,   # biomas x anos com dado no PRODES
+                                biomes = biomas,
+                                south_america = south_america,
+                                map_theme = map_theme)
+m_def$maps$annual
+save_disturbance_maps(m_def, "figs_disturbance/", prefix = "deforestation")
+
+# acumulado só de 2016-2023, para todos os biomas terem os mesmos anos
+m_def_total <- map_disturbance_annual(prodes$cell,
+                                      value = "def_km2", label = "Deforestation",
+                                      years = 2016:2023, cells = fire$land, coverage = prodes_cov,
+                                      biomes = biomas, south_america = south_america, map_theme = map_theme)
+m_def_total$maps$total
+ggplot2::ggsave("figs_disturbance/deforestation_total_2016_2023.png", m_def_total$maps$total,
+                width = 8.4, height = 7.2, dpi = 300, bg = "white")
+
