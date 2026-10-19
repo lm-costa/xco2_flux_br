@@ -275,3 +275,20 @@ res_climatica$maps$temp              # mapa de r (estimado e MIP lado a lado) co
 save_climate_plots(res_climatica, "figs_climate/")
 
 
+############################################################
+# 7.  Fire (INPE AQ1KM) and deforestation (PRODES)         #
+############################################################
+
+# 7.1 Área queimada mensal do INPE (AQ1KM, Coleção 2, 1 km, MODIS): download dos GeoTIFFs mensais.
+#     YOU DON'T NEED TO RUN THIS EVERY TIME: os arquivos ficam em data-raw/aq1km (~90 MB para 2015-2023)
+# aq1km_download(dir = "data-raw/aq1km", years = 2015:2023)
+
+# 7.2 Agregação para a grade de 1° do fluxo (só pixels dentro dos biomas). `annual` usa a união dos meses
+fire <- aq1km_aggregate("data-raw/aq1km",
+                        years    = 2015:2023,
+                        biomes   = biomas,
+                        out_dir  = "data/fire")
+# fire <- readRDS("data/fire/aq1km_cell_month.rds")
+fire$annual         # lon, lat, year, burned_km2 (área queimada ao menos uma vez no ano)
+fire$total_biome    # km2 queimados por bioma x ano (conferir contra outras fontes)
+
