@@ -422,3 +422,150 @@ save_disturbance_maps <- function(res, dir = ".", prefix = "disturbance", dpi = 
   invisible(dir)
 }
 
+#' Área queimada ou desmatamento x fluxo estimado, fluxo do MIP e viés (célula x ano)
+#'
+#' Junta a área anual de um distúrbio (fogo ou desmatamento, em km2 por célula de 1°) com o fluxo anual
+#' de `map_flux_annual()$annual` (est_annual, ref_annual e bias_annual, g C m-2 ano-1; viés = estimado - MIP)
+#' e mede a associação com a correlação de Spearman (ρ) e a de Pearson (r):
+#'
+#'  1. `pooled`: todas as células x anos juntas, por bioma e Brasil, com IC95% por bootstrap de células.
+#'  2. `by_year`: ρ por ano (Brasil e cada bioma).
+#'  3. `within_cell`: ρ ao longo dos anos dentro de cada célula (>= `min_years` anos): mediana por bioma e
+#'     fração de células com ρ > 0; `anomalies`: ρ agregado das anomalias (valor - média da célula).
+#'  3b. `cumulative`: por célula (>= `min_years` anos), área acumulada no período x fluxo médio dos anos (ρ e r
+#'     por bioma): remove o problema de alinhar o ano do distúrbio com o ano do fluxo.
+#'  4. `classes`: fluxo médio por classe de área (sem o distúrbio = "zero", e tercis das células com
+#'     o distúrbio dentro do bioma).
+#'  5. `robustness`: variações da análise (só células x ano com >= `min_months` meses pareados, fração da
+#'     célula em vez de km2 se `area_land` for dado, e resíduos de um polinômio de latitude).
+#'
+#' Células sem registro de `dist` contam como 0. Com `coverage`, os biomas x anos que o produto não cobre
+#' são excluídos (em vez de contar como 0).
+#'
+#' @param flux_annual data.frame `annual` de map_flux_annual(): lon, lat, year, biome, n_months,
+#'                    est_annual, ref_annual, bias_annual.
+#' @param dist        data.frame com lon, lat, year e a coluna `value` em km2 (por exemplo `fire$annual`
+#'                    ou `prodes$cell`). Linhas repetidas da mesma célula x ano são somadas.
+#' @param value       Coluna em km2 de `dist`.
+#' @param label       Nome da grandeza (ex.: "Burned area", "Deforestation"), usado nos resultados.
+#' @param coverage    data.frame com biome e year dos biomas x anos cobertos pelo produto (NULL = todos).
+#' @param area_land   data.frame com lon, lat e area_land_km2 (área da célula dentro dos biomas), p/ a fração.
+#' @param min_years   Anos mínimos por célula nas análises dentro da célula.
+#' @param min_months  Meses pareados mínimos (n_months) na robustez.
+#' @param boot        Repetições do bootstrap de células (0 = sem IC).
+#' @param seed        Semente do bootstrap.
+#'
+#' @return lista: data, pooled, by_year, within_cell, anomalies, classes, robustness (todas tibbles).
+compare_disturbance <- function(flux_annual,
+                                dist,
+                                value      = "burned_km2",
+                                label      = "Burned area",
+                                coverage   = NULL,
+                                area_land  = NULL,
+                                min_years  = 5,
+                                min_months = 6,
+                                boot       = 200,
+                                seed       = 42) {
+  need <- c("lon", "lat", "year", "biome", "n_months", "est_annual", "ref_annual", "bias_annual")
+  if (!all(need %in% names(flux_annual))) stop("flux_annual precisa de: ", paste(setdiff(need, names(flux_annual)), collapse = ", "))
+  if (!all(c("lon", "lat", "year", value) %in% names(dist))) stop("dist precisa de lon, lat, year e '", value, "'.")
+
+  dd <- as.data.frame(dist); dd$v <- dd[[value]]
+  dd <- dd |> dplyr::group_by(lon = round(lon, 4), lat = round(lat, 4), year) |>
+    dplyr::summarise(v = sum(v, na.rm = TRUE), .groups = "drop")
+  d <- as.data.frame(flux_annual) |>
+    dplyr::transmute(lon = round(lon, 4), lat = round(lat, 4), year, biome, n_months,
+                     est = est_annual, ref = ref_annual, bias = bias_annual) |>
+    dplyr::left_join(dd, by = c("lon", "lat", "year")) |>
+    dplyr::mutate(v = dplyr::coalesce(v, 0))
+  if (!is.null(coverage)) d <- d[paste(d$biome, d$year) %in% paste(coverage$biome, coverage$year), ]
+  if (!is.null(area_land)) {
+    al <- data.frame(lon = round(area_land$lon, 4), lat = round(area_land$lat, 4), area_land_km2 = area_land$area_land_km2)
+    d <- dplyr::left_join(d, al, by = c("lon", "lat")); d$frac <- d$v / d$area_land_km2
+  }
+  if (nrow(d) == 0) stop("Nenhuma célula x ano depois de juntar os dados.")
+  d <- tibble::as_tibble(d)
+
+  rho <- function(x, y) suppressWarnings(stats::cor(x, y, method = "spearman"))
+  prs <- function(x, y) suppressWarnings(stats::cor(x, y))
+  grp <- function(f) dplyr::bind_rows(
+    f(d) |> dplyr::mutate(group = "Brasil", .before = 1),
+    d |> dplyr::group_by(group = biome) |> dplyr::group_modify(~ f(.x)) |> dplyr::ungroup())
+
+  # ---- 1) agregado, com IC por bootstrap de células ----------------------------
+  set.seed(seed)
+  ci <- function(dat, var) {
+    if (boot < 1) return(c(NA_real_, NA_real_))
+    key <- paste(dat$lon, dat$lat); idx <- split(seq_len(nrow(dat)), key)
+    s <- replicate(boot, { cs <- sample(names(idx), replace = TRUE); g <- dat[unlist(idx[cs]), ]; rho(g$v, g[[var]]) })
+    as.numeric(stats::quantile(s, c(0.025, 0.975), na.rm = TRUE))
+  }
+  pooled_one <- function(g) dplyr::bind_rows(lapply(c("est", "ref", "bias"), function(var) {
+    b <- ci(g, var)
+    tibble::tibble(var = var, n = nrow(g), rho = rho(g$v, g[[var]]), rho_lo = b[1], rho_hi = b[2], r = prs(g$v, g[[var]]))
+  }))
+  pooled <- grp(pooled_one)
+
+  # ---- 2) por ano ------------------------------------------------------------------
+  by_year <- dplyr::bind_rows(
+    d |> dplyr::group_by(group = "Brasil", year) |> dplyr::group_modify(~ yr_tab(.x, rho)) |> dplyr::ungroup(),
+    d |> dplyr::group_by(group = biome, year) |> dplyr::group_modify(~ yr_tab(.x, rho)) |> dplyr::ungroup())
+
+  # ---- 3) dentro da célula -----------------------------------------------------------
+  cc <- d |> dplyr::group_by(lon, lat, biome) |> dplyr::filter(dplyr::n() >= min_years) |>
+    dplyr::summarise(n_years = dplyr::n(), rho_est = rho(v, est), rho_ref = rho(v, ref), rho_bias = rho(v, bias), .groups = "drop")
+  wc <- function(g) tibble::tibble(n_cells = nrow(g),
+    med_rho_est = stats::median(g$rho_est, na.rm = TRUE), med_rho_ref = stats::median(g$rho_ref, na.rm = TRUE),
+    med_rho_bias = stats::median(g$rho_bias, na.rm = TRUE), pos_est = mean(g$rho_est > 0, na.rm = TRUE),
+    pos_ref = mean(g$rho_ref > 0, na.rm = TRUE), pos_bias = mean(g$rho_bias > 0, na.rm = TRUE))
+  within_cell <- dplyr::bind_rows(wc(cc) |> dplyr::mutate(group = "Brasil", .before = 1),
+                                  cc |> dplyr::group_by(group = biome) |> dplyr::group_modify(~ wc(.x)) |> dplyr::ungroup())
+  an <- d |> dplyr::group_by(lon, lat) |> dplyr::filter(dplyr::n() >= min_years) |>
+    dplyr::mutate(dplyr::across(c(v, est, ref, bias), ~ .x - mean(.x), .names = "{.col}_a")) |> dplyr::ungroup()
+  anomalies <- dplyr::bind_rows(
+    an |> dplyr::summarise(group = "Brasil", n = dplyr::n(), rho_est = rho(v_a, est_a), rho_ref = rho(v_a, ref_a), rho_bias = rho(v_a, bias_a)),
+    an |> dplyr::group_by(group = biome) |> dplyr::summarise(n = dplyr::n(), rho_est = rho(v_a, est_a), rho_ref = rho(v_a, ref_a), rho_bias = rho(v_a, bias_a)))
+
+  # ---- 4) classes de área (zero e tercis dos positivos, dentro do bioma) ---------------
+  classes <- d |> dplyr::group_by(biome) |>
+    dplyr::mutate(class = dplyr::case_when(
+      v <= 0 ~ "zero",
+      TRUE   ~ c("low", "mid", "high")[pmin(3L, pmax(1L, dplyr::ntile(dplyr::if_else(v > 0, v, NA_real_), 3)))])) |>
+    dplyr::group_by(group = biome, class) |>
+    dplyr::summarise(n = dplyr::n(), area_km2 = mean(v), est = mean(est), ref = mean(ref), bias = mean(bias), .groups = "drop") |>
+    dplyr::mutate(class = factor(class, levels = c("zero", "low", "mid", "high"))) |> dplyr::arrange(group, class)
+
+  # ---- 4b) acumulado por célula: soma da área no período x fluxo médio dos anos ------------------
+  cum_cell <- d |> dplyr::group_by(lon, lat, biome) |>
+    dplyr::summarise(n_years = dplyr::n(), v_cum = sum(v), est = mean(est), ref = mean(ref), bias = mean(bias), .groups = "drop") |>
+    dplyr::filter(n_years >= min_years)
+  cm_one <- function(g) tibble::tibble(n_cells = nrow(g),
+    rho_est = rho(g$v_cum, g$est), rho_ref = rho(g$v_cum, g$ref), rho_bias = rho(g$v_cum, g$bias),
+    r_est = prs(g$v_cum, g$est), r_ref = prs(g$v_cum, g$ref), r_bias = prs(g$v_cum, g$bias))
+  cumulative <- dplyr::bind_rows(cm_one(cum_cell) |> dplyr::mutate(group = "Brasil", .before = 1),
+                                 cum_cell |> dplyr::group_by(group = biome) |> dplyr::group_modify(~ cm_one(.x)) |> dplyr::ungroup())
+
+  # ---- 5) robustez --------------------------------------------------------------------
+  rb <- function(g, lab, col = "v") tibble::tibble(spec = lab, n = nrow(g), rho_est = rho(g[[col]], g$est),
+                                                    rho_ref = rho(g[[col]], g$ref), rho_bias = rho(g[[col]], g$bias))
+  res_lat <- function(g) {
+    if (nrow(g) < 20) return(tibble::tibble(spec = "latitude residuals (poly 3)", n = nrow(g), rho_est = NA_real_, rho_ref = NA_real_, rho_bias = NA_real_))
+    f <- stats::resid(stats::lm(rank(g$v) ~ stats::poly(g$lat, 3)))
+    tibble::tibble(spec = "latitude residuals (poly 3)", n = nrow(g),
+                   rho_est = rho(f, stats::resid(stats::lm(g$est ~ stats::poly(g$lat, 3)))),
+                   rho_ref = rho(f, stats::resid(stats::lm(g$ref ~ stats::poly(g$lat, 3)))),
+                   rho_bias = rho(f, stats::resid(stats::lm(g$bias ~ stats::poly(g$lat, 3)))))
+  }
+  rob_one <- function(g) dplyr::bind_rows(rb(g, "base (km2)"),
+    rb(g[g$n_months >= min_months, ], paste0("n_months >= ", min_months)),
+    if ("frac" %in% names(g)) rb(g, "fraction of cell", "frac"), res_lat(g))
+  robustness <- grp(rob_one)
+
+  list(label = label, data = d, pooled = pooled, by_year = by_year, within_cell = within_cell,
+       anomalies = anomalies, cumulative = cumulative, classes = classes, robustness = robustness)
+}
+
+# ρ de Spearman (fluxo x área) para um grupo de um ano, nas três variáveis
+yr_tab <- function(g, rho) tibble::tibble(n = nrow(g), rho_est = rho(g$v, g$est),
+                                          rho_ref = rho(g$v, g$ref), rho_bias = rho(g$v, g$bias))
+

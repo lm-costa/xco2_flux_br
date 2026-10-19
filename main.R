@@ -339,3 +339,17 @@ m_def_total$maps$total
 ggplot2::ggsave("figs_disturbance/deforestation_total_2016_2023.png", m_def_total$maps$total,
                 width = 8.4, height = 7.2, dpi = 300, bg = "white")
 
+# 7.5 Fogo e desmatamento x fluxo estimado, fluxo do MIP e viés (usa out$annual, da seção 5)
+#     pooled: ρ de Spearman (e IC95% por bootstrap de células) por bioma; by_year: por ano;
+#     within_cell / anomalies: variação interanual dentro da célula; classes: fluxo por classe de área;
+#     robustness: só >= 6 meses pareados, fração da célula e resíduos de latitude
+cmp_fire <- compare_disturbance(out$annual, fire$annual,
+                                value = "burned_km2", label = "Burned area",
+                                area_land = fire$land)
+cmp_def  <- compare_disturbance(out$annual, prodes$cell,
+                                value = "def_km2", label = "Deforestation",
+                                coverage = prodes_cov,
+                                area_land = fire$land)
+cmp_fire$pooled; cmp_fire$by_year; cmp_fire$within_cell; cmp_fire$classes; cmp_fire$robustness
+cmp_def$pooled;  cmp_def$by_year;  cmp_def$within_cell;  cmp_def$classes;  cmp_def$robustness
+
