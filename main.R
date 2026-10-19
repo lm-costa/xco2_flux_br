@@ -292,3 +292,18 @@ fire <- aq1km_aggregate("data-raw/aq1km",
 fire$annual         # lon, lat, year, burned_km2 (área queimada ao menos uma vez no ano)
 fire$total_biome    # km2 queimados por bioma x ano (conferir contra outras fontes)
 
+# 7.3 Desmatamento anual do PRODES (TerraBrasilis, WFS): baixa os polígonos em páginas e já agrega para 1°
+#     (os polígonos não são guardados; cada bioma x ano fica em data/prodes). `year` = ano PRODES (ago-jul)
+#     YOU DON'T NEED TO RUN THIS EVERY TIME: ~1 GB de transferência, retoma de onde parou
+# prodes <- prodes_aggregate(years = 2015:2023, out_dir = "data/prodes")
+prodes <- readRDS("data/prodes/prodes_cell_year.rds")
+prodes$cell         # biome, lon, lat, year, def_km2, n_poly
+prodes$total        # km2 desmatados por bioma x ano (conferir contra os números oficiais do PRODES)
+
+# Biomas x anos com dado no PRODES: Caatinga, Mata Atlântica, Pampa e Pantanal só têm série a partir de 2016
+# (em 2015 vêm vazios, o Pampa com 1 polígono), então 2015 conta como "sem dado" neles, e não como zero
+prodes_cov <- prodes$total |>
+  dplyr::filter(n_poly > 0,
+                !(biome %in% c("Caatinga", "Mata Atlântica", "Pampa", "Pantanal") & year == 2015)) |>
+  dplyr::select(biome, year)
+
