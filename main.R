@@ -196,15 +196,20 @@ save_flux_plots(res, dir = "figs/")                       # salva PNGs
 out <- map_flux_annual(df_comp, biomes = biomas,
                        south_america = south_america,   # seu objeto sf
                        map_theme = map_theme,         # seu tema
+                       est_sigma = 'sigma_f_cell',
+                       ref_sigma = 'net_flux_sd',
                        years = 2015:2023,
                        min_months = 3,   # meses pareados mínimos na célula x ano
-                       min_years  = 3)   # anos mínimos para a regressão da célula
+                       min_years  = 3,)   # anos mínimos para a regressão da célula
 
 out$summary         # Brasil: medianas de r, slope, rmse, bias; fração de células com p < 0.05
 out$summary_biome   # o mesmo por bioma
 out$regression      # métricas célula a célula (lon, lat, slope, r, p, rmse, bias...)
-out$maps$flux_estimated; out$maps$flux_reference; out$maps$bias; out$maps$r; out$maps$slope
-out$maps$rmse
+out$maps$flux_estimated; out$maps$flux_reference;
+out$maps$sigma_estimated;out$maps$sigma_reference;
+out$maps$bias; out$maps$r; out$maps$slope;out$maps$rmse
+
+out |> readr::write_rds('output/metrics_spatial.rds')
 
 save_flux_maps(out, "figs/")
 

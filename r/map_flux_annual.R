@@ -17,6 +17,14 @@
 #' @param biome_col  Coluna com o nome do bioma (padrão "name_biome").
 #' @param drop_outside Com `biomes`, exclui células cujo centro cai fora de todos os biomas.
 #' @param est,ref    Colunas do fluxo estimado e do net_flux (g C m-2 d-1).
+#' @param est_sigma  Coluna da incerteza (1 desvio padrão) do estimado na célula x mês, em
+#'                   g C m-2 d-1 (padrão "sigma_f_cell", saída de agg_xco2_flux(sigma = "sigma_f")).
+#'                   NULL ou inexistente = sem mapa de incerteza do estimado.
+#' @param ref_sigma  Coluna da incerteza (1 desvio padrão) do net_flux do MIP na célula x mês
+#'                   (ex.: o desvio do ensemble, arquivo EnsStd, já juntado ao df). Multiplicada
+#'                   por `ref_factor`. NULL = sem mapa de incerteza do MIP.
+#'                   Os mapas de incerteza mostram a incerteza MÉDIA DIÁRIA (g C m-2 d-1) da
+#'                   célula x ano: média dos meses pareados, sem anualizar.
 #' @param ref_factor Fator que converte `ref` para g C m-2 d-1 (padrão 1; confira a unidade).
 #' @param years      Anos a usar. NULL = todos.
 #' @param min_days   Mínimo de dias com sondagem na célula x mês (usa `n_days`, se existir).
@@ -39,7 +47,7 @@
 #' @param res        Resolução da grade em graus (1 ou 2 valores). NULL = inferida.
 #' @param plot       Gera os mapas (requer ggplot2).
 #'
-#' @return lista: annual (célula x ano), regression (por célula), summary (Brasil),
+#' @return lista: annual (célula x ano, com est_sigma_daily e ref_sigma_daily), regression (por célula), summary (Brasil),
 #'         summary_biome (por bioma, se `biomes`), maps (lista de ggplots).
 map_flux_annual <- function(df,
                             biomes       = NULL,
@@ -48,6 +56,8 @@ map_flux_annual <- function(df,
                             est          = "fco2_mean",
                             ref          = "net_flux",
                             ref_factor   = 1,
+                            est_sigma    = "sigma_f_cell",
+                            ref_sigma    = NULL,
                             years        = NULL,
                             min_days     = 1,
                             min_months   = 6,
@@ -78,6 +88,10 @@ map_flux_annual <- function(df,
   d <- as.data.frame(df)
   d$est <- d[[est]]
   d$ref <- d[[ref]] * ref_factor
+  if (!is.null(ref_sigma) && !ref_sigma %in% names(df))
+    stop("ref_sigma '", ref_sigma, "' não existe em df.")
+  d$est_sig <- if (!is.null(est_sigma) && est_sigma %in% names(d)) d[[est_sigma]] else NA_real_
+  d$ref_sig <- if (!is.null(ref_sigma)) d[[ref_sigma]] * ref_factor else NA_real_
   d$lon <- round(d$lon, 4); d$lat <- round(d$lat, 4)
   if ("n_days" %in% names(d)) d <- d[is.na(d$n_days) | d$n_days >= min_days, ]
   if (!is.null(years)) d <- d[d$year %in% years, ]
@@ -110,6 +124,9 @@ map_flux_annual <- function(df,
     dplyr::summarise(n_months   = dplyr::n(),
                      est_annual = mean(est) * days_in_year,
                      ref_annual = mean(ref) * days_in_year,
+                     # incerteza média diária (g C m-2 d-1), sem anualizar
+                     est_sigma_daily = if (all(is.na(est_sig))) NA_real_ else mean(est_sig, na.rm = TRUE),
+                     ref_sigma_daily = if (all(is.na(ref_sig))) NA_real_ else mean(ref_sig, na.rm = TRUE),
                      .groups = "drop") |>
     dplyr::filter(n_months >= min_months) |>
     dplyr::mutate(bias_annual = est_annual - ref_annual)      # estimado - net_flux
@@ -293,8 +310,11 @@ map_flux_annual <- function(df,
   sl <- q(regression$slope, c(0.02, 0.98)); bl <- max(abs(q(regression$bias, c(0.02, 0.98))))
   div_sl <- diverging(c(min(sl[1], 0), max(sl[2], 2)), 1)
   unit <- quote(g ~ C ~ m^{-2} ~ yr^{-1})
+  sig_name <- expression(atop("Uncertainty", "(g C m"^{-2} * " d"^{-1} * ")"))
+  sig_est <- annual[is.finite(annual$est_sigma_daily), ]
+  sig_ref <- annual[is.finite(annual$ref_sigma_daily), ]
 
-  list(
+  c(list(
     flux_estimated = build(annual, "est_annual", inferno(lim_of("estimated", annual$est_annual)), fco2, TRUE),
     flux_reference = build(annual, "ref_annual", inferno(lim_of("reference", annual$ref_annual)), fco2, TRUE),
     bias           = build(annual, "bias_annual", bias_scale, "Bias", TRUE),
@@ -302,7 +322,14 @@ map_flux_annual <- function(df,
     rmse      = build(regression, "rmse", inferno(c(0, q(regression$rmse, c(0.02, 0.98))[2])), "RMSE"),
     slope     = build(regression, "slope", div_sl, "Slope"),
     bias_mean = build(regression, "bias", diverging(c(-bl, bl), 0), "Bias")
-  )
+  ),
+  # incerteza média diária por célula x ano (escalas independentes; limits$sigma_estimated / $sigma_reference)
+  if (nrow(sig_est) > 0)
+    list(sigma_estimated = build(sig_est, "est_sigma_daily",
+                                 inferno(lim_of("sigma_estimated", sig_est$est_sigma_daily)), sig_name, TRUE)),
+  if (nrow(sig_ref) > 0)
+    list(sigma_reference = build(sig_ref, "ref_sigma_daily",
+                                 inferno(lim_of("sigma_reference", sig_ref$ref_sigma_daily)), sig_name, TRUE)))
 }
 
 #' Salva os mapas de map_flux_annual() em PNG
@@ -315,7 +342,8 @@ save_flux_maps <- function(res, dir = ".", dpi = 300, panel = 6) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   ny   <- length(unique(res$annual$year))
   ncol <- min(3, ny); nrow <- ceiling(ny / ncol)
-  size <- function(nm) if (nm %in% c("flux_estimated", "flux_reference", "bias"))
+  size <- function(nm) if (nm %in% c("flux_estimated", "flux_reference", "bias",
+                                     "sigma_estimated", "sigma_reference"))
     c(panel * ncol, panel * nrow) else c(panel, panel)
   for (nm in names(res$maps)) {
     sz <- size(nm)
@@ -342,4 +370,10 @@ save_flux_maps <- function(res, dir = ".", dpi = 300, panel = 6) {
 # out$summary_biome   # o mesmo por bioma
 # out$regression      # métricas célula a célula (lon, lat, slope, r, p, rmse, bias...)
 # out$maps$flux_estimated; out$maps$flux_reference; out$maps$bias; out$maps$r; out$maps$slope
+#
+# # Mapas da incerteza média diária (g C m-2 d-1): estimado (sigma_f_cell) e MIP (EnsStd).
+# # Junte antes o desvio do ensemble ao df (por lon, lat, year, month), por ex. coluna `net_flux_sd`:
+# out <- map_flux_annual(df_comp, biomes = biomas, est_sigma = "sigma_f_cell", ref_sigma = "net_flux_sd")
+# out$maps$sigma_estimated; out$maps$sigma_reference
+# # escalas: limits = list(sigma_estimated = c(0, 0.5), sigma_reference = c(0, 0.5))
 # save_flux_maps(out, "figs/")
