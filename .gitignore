@@ -8,5 +8,7 @@ data-raw/*
 !data-raw/.gitkeep
 data/Fluxes_MIP/*
 data/fluxes_MIP_std/*
+nasa_power_data/
+SIF/
 .RData
 .positai
