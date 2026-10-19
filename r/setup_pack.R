@@ -28,7 +28,7 @@ setup_packages <- function(extra   = NULL,
   pkgs <- list(
     core = c("dplyr", "tibble", "ggplot2", "scales", "tidyr", "lubridate"),
     maps = c("sf", "geobr", "ggspatial", "rnaturalearth", "rnaturalearthdata"),
-    io   = c("ncdf4", "readxl", "writexl")
+    io   = c("ncdf4", "readxl", "writexl",'vroom','nasapower')
   )
   tab <- do.call(rbind, lapply(groups, function(g)
     data.frame(package = pkgs[[g]], group = g, stringsAsFactors = FALSE)))
