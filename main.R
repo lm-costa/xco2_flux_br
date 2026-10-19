@@ -144,7 +144,7 @@ df_comp <- agg_xco2_flux(
   sigma = 'sigma_f',
   min_days = 1,
   join='left',
-  out_file = 'data/comparison.rds',
+  out_file = 'data/comparison_new.rds',
 
 )
 
