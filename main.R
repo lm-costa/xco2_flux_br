@@ -390,3 +390,8 @@ inc_dist <- increment_disturbance(df0, inc, full_lnlgis, biomas, fire, prodes, p
 inc_dist$fire_inc$pooled; inc_dist$def_inc$pooled          # rho (IC95%) de fogo e desmatamento x delta, incremento e diferenca
 saveRDS(inc_dist, "output/increment_disturbance.rds")
 plot_increment_disturbance(inc_dist, "figs_increment/inc_disturbance_rho.png")
+
+# 6b. Mapas das medias anuais do clima (NASA POWER, 2015-2023) nas celulas de 1 grau: figura suplementar 1
+pw <- readRDS("data/nasa_power/power_cell_month.rds")
+clim_maps <- plot_climate_maps(pw, biomas, south_america, years = 2015:2023, out = "figs_climate/climate_maps_supp1.png")
+clim_maps$by_biome                     # media por bioma de cada variavel

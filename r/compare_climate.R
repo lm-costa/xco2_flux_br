@@ -497,3 +497,48 @@ save_climate_plots <- function(res, dir = ".", dpi = 300, panel = 6) {
 #
 # # sem baixar de novo (só o que já está na pasta):
 # res <- compare_climate(df_comp, biomes = biomas, download = FALSE)
+
+#' Mapas das medias anuais das variaveis climaticas (NASA POWER) nas celulas de 1 grau do fluxo
+#' Usa o dataset salvo por compare_climate(out_dir = ...) (prec, qg, rh, temp, ws por celula x mes).
+#' Media dos valores anuais em `years`: precipitacao = soma mensal (mm ano-1); demais variaveis = media mensal.
+#' @param power data frame lon, lat, year, month, prec, qg, rh, temp, ws
+#' @param biomes sf dos biomas; @param south_america sf de fundo (opcional)
+#' @return lista: plot (patchwork), cells (media por celula) e by_biome (media por bioma, 1 linha por variavel)
+plot_climate_maps <- function(power, biomes, south_america = NULL, years = 2015:2023, out = "figs_climate/climate_maps.png", width = 9, height = 10) {
+  library(ggplot2); library(patchwork)
+  p <- power[power$year %in% years, ]
+  full <- stats::aggregate(month ~ lon + lat + year, p, length); full <- full[full$month == 12, c("lon", "lat", "year")]
+  p <- merge(p, full, by = c("lon", "lat", "year"))                           # so anos com os 12 meses
+  ann <- stats::aggregate(cbind(prec = prec, qg = qg, rh = rh, temp = temp, ws = ws) ~ lon + lat + year, p,
+                          function(x) c(m = mean(x), s = sum(x)))
+  an <- data.frame(lon = ann$lon, lat = ann$lat, year = ann$year, prec = ann$prec[, "s"], qg = ann$qg[, "m"], rh = ann$rh[, "m"], temp = ann$temp[, "m"], ws = ann$ws[, "m"])
+  cells <- stats::aggregate(cbind(prec, qg, rh, temp, ws) ~ lon + lat, an, mean)
+  b <- sf::st_make_valid(biomes[biomes$name_biome != "Sistema Costeiro", ])
+  pts <- sf::st_as_sf(cells, coords = c("lon", "lat"), crs = sf::st_crs(b), remove = FALSE)
+  suppressMessages(sf::sf_use_s2(FALSE)); idx <- sf::st_intersects(pts, b)
+  cells$biome <- vapply(idx, function(i) if (length(i)) as.character(sf::st_drop_geometry(b)$name_biome[i[1]]) else NA_character_, "")
+  vars <- list(rh = list(lab = "Relative humidity (%)", col = "mako", dir = -1),
+               prec = list(lab = expression("Precipitation (mm yr"^-1*")"), col = "viridis", dir = -1),
+               temp = list(lab = "Air temperature (°C)", col = "inferno", dir = 1),
+               qg = list(lab = expression("Shortwave radiation (MJ m"^-2*" d"^-1*")"), col = "plasma", dir = 1),
+               ws = list(lab = expression("Wind speed at 2 m (m s"^-1*")"), col = "cividis", dir = 1))
+  tags <- c("(a)", "(b)", "(c)", "(d)", "(e)")
+  mk <- function(v, i) {
+    g <- ggplot() + (if (!is.null(south_america)) geom_sf(data = south_america, fill = "grey92", colour = "grey70", linewidth = 0.2)) +
+      geom_tile(data = cells, aes(lon, lat, fill = .data[[v]]), width = 1, height = 1) + geom_sf(data = b, fill = NA, colour = "black", linewidth = 0.25) +
+      scale_fill_viridis_c(option = vars[[v]]$col, direction = vars[[v]]$dir, name = vars[[v]]$lab, guide = guide_colourbar(barheight = grid::unit(2.6, "cm"), barwidth = grid::unit(0.35, "cm"))) +
+      coord_sf(xlim = c(-74.5, -34), ylim = c(-34, 5.5), expand = FALSE) + labs(title = tags[i], x = NULL, y = NULL) +
+      theme_bw(base_size = 9, base_family = "Times New Roman") + theme(plot.title = element_text(face = "bold", size = 10, hjust = 0), legend.title = element_text(size = 8),
+            legend.text = element_text(size = 7.5), panel.grid.major = element_line(colour = "grey85", linewidth = 0.2), plot.margin = margin(2, 2, 2, 2))
+    if (i == 1) g <- g + ggspatial::annotation_north_arrow(location = "tr", style = ggspatial::north_arrow_minimal, height = grid::unit(0.8, "cm"), width = grid::unit(0.8, "cm")) +
+      ggspatial::annotation_scale(location = "bl", height = grid::unit(0.15, "cm"), text_cex = 0.6)
+    g
+  }
+  pl <- Map(mk, names(vars), seq_along(vars))
+  fig <- (pl[[1]] + pl[[2]]) / (pl[[3]] + pl[[4]]) / (pl[[5]] + patchwork::plot_spacer())
+  dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
+  ragg::agg_png(out, width = width, height = height, units = "in", res = 300); print(fig); grDevices::dev.off()
+  bb <- do.call(rbind, lapply(c("rh", "prec", "temp", "qg", "ws"), function(v) { a <- stats::aggregate(cells[[v]], list(biome = cells$biome), mean); data.frame(var = v, a) }))
+  bw <- stats::reshape(bb, idvar = "biome", timevar = "var", direction = "wide"); names(bw) <- sub("^x\\.", "", names(bw))
+  list(plot = fig, cells = tibble::as_tibble(cells), by_biome = tibble::as_tibble(bw))
+}
