@@ -1,6 +1,12 @@
 # OCO-2 v11 MIP: XCO2 × fluxos gradeados (Brasil)
 
-Pipeline em R que compara o fluxo de CO2 estimado a partir do XCO2 do OCO-2 MIP com o `net_flux` gradeado do próprio MIP.
+Pipeline em R que estima o fluxo de CO2 do Brasil (2015–2023) a partir do XCO2 do OCO-2, **sem cálculos de transporte atmosférico**, e o compara com o `net_flux` gradeado do OCO-2 MIP v11.
+
+**Ideia.** O XCO2 simulado pelo experimento do MIP que assimila só dados *in situ* (`IS`) serve de fundo. A diferença `delta = XCO2 observado (OCO-2) − XCO2 simulado (IS)` carrega o sinal de trocas próximas à superfície que a rede *in situ* não restringe, e é convertida em fluxo por um balanço de massa na coluna (fração `f_a` da coluna e tempo de residência `τ`). O fluxo estimado é agregado nas células de 1° do MIP e comparado, por bioma, ano e mês, com o fluxo do experimento `LNLGIS` (que também assimila OCO-2), com desmatamento (PRODES), área queimada (AQ1KM) e clima (NASA POWER).
+
+**Status.** Trabalho exploratório. Os resultados mostram concordância razoável no balanço anual (r = 0,61 para o Brasil) e fraca na escala mensal, com viés positivo; a abordagem não substitui as inversões. Veja as limitações no manuscrito e na seção 8.
+
+**Índice:** 1. Visão geral · 2. Arquivos `.rds` · 3. Experimentos · 4. Submissions · 5. Scripts · 6. Incerteza · 7. Ressalvas · 8. Análises adicionais · 9. Estrutura e como rodar · 10. Fontes de dados.
 
 
 
@@ -18,7 +24,7 @@ NetCDF do MIP (por submission × experimento)
 ensemble__<EXP>.rds   (obs + média/dp do ensemble)     [1 linha = 1 sondagem]
    │  delta = xco2 − xco2_ens_mean   (experimento IS)
    ▼
-delta → fluxo pontual por sondagem                      (inventário de coluna, τ = 1 dia)
+delta → fluxo pontual por sondagem                      (balanço de massa: f_a = 0,2; τ = 2,5 dias)
    │  agg_xco2_flux()   (célula do net_flux × mês)
    ▼
 teste_comp.rds   (estimado + net_flux, 1 linha = célula × mês)
@@ -37,10 +43,11 @@ EnsMean__<EXP>.rds, EnsStd__<EXP>.rds                   [1 linha = célula × m�
 1. **Extração do XCO2 (`mip_extractor`).** Lê os NetCDF do MIP de cada submission × experimento e recorta o Brasil.
 2. **Ensemble (`build_ensemble`).** Combina as submissions de um experimento e gera, por sondagem, a média (`xco2_ens_mean`) e o desvio padrão (`xco2_ens_sd`) do XCO2 simulado, junto com o XCO2 observado (`xco2`).
 3. **Extração dos fluxos (`flux_extractor`).** Lê os fluxos gradeados (1°, `net_flux`) e salva a média do ensemble (`EnsMean`) e o desvio entre membros (`EnsStd`) por célula × mês.
-4. **Delta e fluxo pontual.** `delta = xco2 − xco2_ens_mean`, com o simulado do experimento **IS**. O delta é convertido em fluxo por sondagem como inventário de coluna, sem vento, com tempo de residência τ = 1 dia (default). A magnitude depende de τ.
+4. **Delta e fluxo pontual (`fco2_from_delta`).** `delta = xco2 − xco2_ens_mean`, com o simulado do experimento **IS**. O delta vira fluxo por sondagem por um balanço de massa na coluna, sem vento:
+   `n_dry = (Ps/g − TCWV) / M_ar` (ar seco por m², com a pressão de superfície e o vapor d'água da coluna de cada sondagem), `dM = f_a · delta · 1e-6 · n_dry · M_C` e `fco2 = dM / τ` (g C m⁻² d⁻¹). No `main.R` usa-se `f_a = 0,2` (`flux_fraction`) e `τ = 2,5 dias` (`tau_days`). O fluxo escala com `f_a/τ`: os dois parâmetros não são separáveis pelos dados e controlam a amplitude, não a correlação com o MIP.
 5. **Agregação (`agg_xco2_flux`).** Cada sondagem vai para a célula do fluxo mais próxima (centro da célula) e para o mês do seu `datetime`. O método padrão é `dois_estagios`: média por célula × dia e depois média dos dias do mês, de modo que cada dia pesa igual. `n_days` é o número de dias independentes; `<var>_mean`, `<var>_sd` e `<var>_sem` são as estatísticas por célula × mês.
 6. **Comparação (`compare_flux`, `map_flux_annual`).** Estimado × `net_flux` no Brasil e por bioma: correlação, RMSE, viés, balanço mensal/anual/total e regressão célula a célula. Os mapas anuais ficam em `map_flux_annual()`.
-7. **Método beta (`beta_xco2_flux`, `compare_beta`, `balance_beta`).** Tendência do XCO2 por célula e ano convertida em fluxo, reamostrada para 1° e comparada com o estimado e o `net_flux`. Só as células presentes nas duas bases são mantidas (co-locadas).
+7. **Método beta (legado: `beta_xco2_flux`, `compare_beta`, `balance_beta`).** Tendência do XCO2 por célula e ano convertida em fluxo, reamostrada para 1° e comparada com o estimado e o `net_flux`. É a abordagem da primeira versão do trabalho, mantida só como referência (o código fica comentado no `main.R`). A análise com SIF foi retirada do projeto.
 
 ### Convenções e unidades
 
@@ -61,7 +68,12 @@ Padrões observados nos scripts:
 | `<Submission>__<EXP>.rds` (ex.: `data/Fluxes_MIP_completo/Ames__IS.rds`) | `net_flux`  do `<Submission>` para o experimento `<EXP>` | 1 linha por célula × mês |
 | `EnsMean__<EXP>.rds` (ex.: `data/Fluxes_MIP_completo/EnsMean__LNLGIS.rds`) | `net_flux` médio do ensemble para o experimento `<EXP>` | 1 linha por célula × mês |
 | `EnsStd__<EXP>.rds` (ex.: `data/Fluxes_MIP_completo/EnsStd__LNLGIS.rds`) | desvio padrão entre membros do `net_flux` do experimento `<EXP>` (candidato a `ref_sigma`) | 1 linha por célula × mês |
-| `comparison.rds` | saída de `agg_xco2_flux()`: estimado + `net_flux` | 1 linha por célula × mês |
+| `comparison.rds` | saída de `agg_xco2_flux()` da versão anterior (τ = 30 d, sem `f_a`) | 1 linha por célula × mês |
+| `comparison_new.rds` | saída de `agg_xco2_flux()` com `f_a = 0,2` e `τ = 2,5 d` (base das análises atuais) | 1 linha por célula × mês |
+| `data/fire/aq1km_cell_month.rds` | área queimada do AQ1KM agregada em células de 1° (listas `monthly`, `annual`, `land`, `total_biome`) | célula × mês / ano |
+| `data/prodes/prodes_cell_year.rds` | desmatamento do PRODES agregado em células de 1° (listas `cell`, `total`) | célula × ano |
+| `data/nasa_power/power_cell_month.rds` | NASA POWER mensal por célula (prec, qg, rh, temp, ws) | célula × mês |
+| `output/*.rds`, `output/*.csv` | resultados das análises (métricas, balanços, comparações). `metrics_temporal.rds` e `metrics_spatial.rds` não são versionados (> 100 MB) e se regeneram no `main.R` | variável |
 
 Regra geral: `<TIPO>__<EXPERIMENTO>.rds`, com **dois sublinhados** entre o tipo (`ensemble`, `EnsMean`, `EnsStd`) e o experimento.
 
@@ -123,22 +135,32 @@ Observações do site que afetam o uso dos dados:
 
 ## 5. Scripts
 
-| Script | Função principal |
+Os scripts ficam em `r/` e são carregados pelo `main.R` (`purrr::map(list.files('r'), source)`).
+
+| Script | Funções principais |
 |---|---|
-| `agg_xco2_flux.R` | `agg_xco2_flux()`: agrega por célula × mês e junta com o fluxo |
-| `compare_flux.R` | `compare_flux()`, `make_flux_plots()`, `save_flux_plots()`: métricas, balanços (mensal/anual/total), séries e scatter |
-| `map_flux_annual.R` | `map_flux_annual()`, `save_flux_maps()`: mapas anuais de estimado, referência, viés, r, RMSE e inclinação |
-| `beta_xco2_flux.R` | `beta_xco2_flux()`, `pair_beta_flux()`: método beta (tendência do XCO2) |
-| `compare_beta.R` | `compare_beta()`, `balance_beta()`, `save_beta_plots()`, `save_beta_maps()`, `save_beta_balance()`: beta × estimado × `net_flux` |
+| `setup_pack.R` | `setup_packages()`: instala/carrega os pacotes |
+| `mip_extractor.R`, `mip_ensemble.R`, `flux_extractor.R` | `mip_extractor()`, `mip_ensemble()` (ensemble do XCO2 por sondagem), `flux_extractor()` (fluxos gradeados) |
+| `fco2_from_delta.R` | `fco2_from_delta()`: delta → fluxo (balanço de massa com `f_a` e `τ`) e propagação de incerteza |
+| `aggregation_xco2.R` | `agg_xco2_flux()`: agrega por célula × mês e junta com o fluxo |
+| `compare_flux.R` | `compare_flux()`, `make_flux_plots()`, `save_flux_plots()`: métricas, balanços (mensal/anual/total), séries e dispersão |
+| `map_flux_annual.R`, `map_theme.R` | `map_flux_annual()`, `save_flux_maps()`: mapas anuais de estimado, referência, viés, r, RMSE, inclinação e incerteza |
+| `plot_lat_profile.R` | `plot_lat_profile()`: perfil latitudinal do fluxo, uma linha por ano |
+| `compare_climate.R` | `compare_climate()`, `save_climate_plots()`, `plot_climate_maps()`: fluxos × anomalias do NASA POWER; mapas das médias climáticas |
+| `disturbance.R` | `aq1km_download()`, `aq1km_aggregate()`, `prodes_aggregate()`, `map_disturbance_annual()`, `save_disturbance_maps()`, `compare_disturbance()`: fogo e desmatamento |
+| `compare_models.R` | `compare_models()`, `plot_models()`, `plot_biome_scatter()`, `compare_models_monthly()`, `plot_models_flux()`, `plot_seasonal_cycle()`: comparação modelo a modelo do MIP |
+| `compare_increment.R` | `mip_increment()`, `compare_increment()`, `plot_increment()`, `increment_disturbance()`, `plot_increment_disturbance()`: comparação com o incremento do OCO-2 (LNLGIS − IS) |
+| `beta_fco2.R`, `compare_beta.R` | método beta (legado; ver seção 1) |
 
 Ordem de uso típica:
 
 ```r
-comp <- agg_xco2_flux(xco2, flux, method = "dois_estagios", out_file = "teste_comp.rds")
-res  <- compare_flux(comp, biomes = biomas)
-maps <- map_flux_annual(comp, biomes = biomas)
-rb   <- compare_beta(dfall, comp, biomes = biomas, unit = "physical", maps = TRUE)
-bal  <- balance_beta(rb)
+df_n  <- fco2_from_delta(df_n, delta = "delta", sigma_delta = "sigma", method = "massa",
+                         tau_days = 2.5, flux_fraction = 0.2)
+comp  <- agg_xco2_flux(df_n, df_flux, vars = "fco2", method = "dois_estagios", sigma = "sigma_f",
+                       out_file = "data/comparison_new.rds")
+res   <- compare_flux(comp, biomes = biomas, years = 2015:2023, ref_sigma = "net_flux_sd")
+maps  <- map_flux_annual(comp, biomes = biomas, years = 2015:2023)
 ```
 
 ---
@@ -187,15 +209,66 @@ Do mensal para o anual e o total: a versão `indep` soma em quadratura (`sqrt(Σ
 
 **O que a incerteza não cobre**
 
-- Tempo de residência τ (1 dia): é uma hipótese, não um erro aleatório. A magnitude do fluxo escala com ela.
+- Fração da coluna `f_a` (0,2) e tempo de residência `τ` (2,5 dias): são hipóteses, não erros aleatórios, e não entram na incerteza propagada (a menos que se informe `sigma_flux_fraction` e `sigma_tau_days`). A magnitude do fluxo escala com `f_a/τ`.
 - Erro sistemático do XCO2 simulado do experimento IS (viés do modelo de transporte), que entra no delta como se fosse sinal.
 - Unidade do `net_flux` (`ref_factor`).
-- O método beta não tem propagação de incerteza; só há o p-valor da regressão, que fica inflado por autocorrelação.
+- O método beta (legado) não tem propagação de incerteza; só há o p-valor da regressão, que fica inflado por autocorrelação.
 
 ---
 
 ## 7. Ressalvas abertas
 
-- Magnitude do fluxo estimado depende de τ (1 dia).
-- Poucos anos por célula (5–9): regressões fracas e p-valores inflados por autocorrelação.
-- Beta ignora o transporte.
+- A magnitude do fluxo estimado depende de `f_a` e `τ` (constantes no espaço e no tempo, sem calibração).
+- O transporte atmosférico não é modelado: o ΔXCO2 de uma célula reflete também os fluxos a montante. A concordância melhora em médias anuais e regionais.
+- Sinal e ruído: com os parâmetros usados, um fluxo de 0,3 g C m⁻² d⁻¹ equivale a cerca de 0,9 ppm de ΔXCO2, parecido com a incerteza de uma sondagem (≈ 1 ppm). Um deslocamento do fundo (≈ +0,27 ppm) é indistinguível de uma fonte líquida persistente.
+- Amostragem: só há células × meses com sondagens válidas (cerca de 33% da área e do tempo do Brasil, 22% na Amazônia); os balanços anuais se referem às células pareadas, não aos biomas inteiros.
+- O fundo (IS) e o fluxo de referência (LNLGIS) vêm do mesmo MIP, então a comparação não é independente. O fluxo do `LNLGIS` contém também a parte já restrita pelos dados *in situ*; ver o teste com `LNLGIS − IS` na seção 8.
+- Não há validação com observações independentes (perfis aéreos, torres de fluxo) neste repositório.
+- Poucos anos por célula (5–9): correlações anuais com fogo, desmatamento e clima são fracas e com IC largos.
+
+---
+
+## 8. Análises adicionais
+
+Todas rodam a partir de `data/comparison_new.rds` e estão nas seções do `main.R`:
+
+| Seção do `main.R` | O que faz | Saídas |
+|---|---|---|
+| 5 | `compare_flux()` e `map_flux_annual()`: estimado × `net_flux` do LNLGIS por bioma, ano e mês; mapas de viés, r e RMSE | `output/metrics_temporal.rds`, `output/metrics_spatial.rds`, `figs/` |
+| 6 e 6b | clima (NASA POWER): correlação de anomalias anuais com o fluxo estimado e o do MIP; mapas das médias climáticas | `output/compare_climate_*.rds`, `figs_climate/` |
+| 7 | fogo (AQ1KM) e desmatamento (PRODES) agregados em 1°, mapas anuais e associação (Spearman, IC por bootstrap) com os fluxos | `data/fire/`, `data/prodes/`, `figs_disturbance/`, `output/compare_*.rds` |
+| 8 e 8b | comparação modelo a modelo do MIP (balanço anual, médias mensais e ciclo sazonal) | `output/compare_models*.rds`, `figs_manuscript/` |
+| 9 e 9b | **exploratório:** comparação com o incremento do OCO-2, `LNLGIS − IS` (grupo a grupo, 16 grupos), e sua associação com fogo e desmatamento | `output/compare_increment.rds`, `output/increment_disturbance.rds`, `figs_increment/` |
+
+As figuras do artigo e do material suplementar estão em `figs_manuscript/`, `figs_climate/`, `figs_disturbance/` e `figs_increment/`. O teste com o incremento (seções 9 e 9b) ainda é uma hipótese: depende de como o incremento é definido e não está no texto principal do artigo.
+
+---
+
+## 9. Estrutura do repositório e como rodar
+
+```
+main.R            roteiro completo (seções 0 a 9b)
+r/                funções (ver seção 5)
+data/             dados processados (rds) usados nas análises
+data-raw/         dados brutos (não versionados; ver seção 10)
+output/           resultados das análises
+figs*/            figuras (figs, figs_climate, figs_disturbance, figs_increment, figs_manuscript)
+```
+
+1. Abra `xco2_flux_br.Rproj` e rode `main.R` por seções (as etapas pesadas — extração do MIP, download do AQ1KM e do PRODES, download do NASA POWER — estão comentadas e já têm os resultados salvos em `data/`).
+2. Os pacotes são instalados e carregados por `setup_packages()` (por exemplo: dplyr, ggplot2, sf, geobr, ncdf4, readxl, vroom, nasapower, ggspatial, patchwork).
+3. Para repetir tudo desde o início, baixe os dados brutos para `data-raw/` e descomente as etapas de extração (`mip_extractor()`, `flux_extractor()`, `aq1km_download()`, `prodes_aggregate()`, `compare_climate(download = TRUE)`).
+4. Os arquivos `output/metrics_temporal.rds` e `output/metrics_spatial.rds` são gerados pela seção 5 e estão no `.gitignore` (acima do limite de 100 MB por arquivo do GitHub).
+
+---
+
+## 10. Fontes de dados
+
+| Dado | Fonte |
+|---|---|
+| XCO2 do OCO-2 (L2 Lite FP, v11.2r) | NASA GES DISC: https://disc.gsfc.nasa.gov/datasets/OCO2_L2_Lite_FP_11.2r/summary |
+| OCO-2 MIP v11 (XCO2 co-amostrado e fluxos gradeados) | NOAA GML: https://gml.noaa.gov/ccgg/OCO2_v11mip/ (DOI 10.15138/V5FS-0616) |
+| Desmatamento (PRODES) | INPE TerraBrasilis: https://terrabrasilis.dpi.inpe.br/en/download-files/ |
+| Área queimada (AQ1KM, Coleção 2) | INPE Queimadas: https://dataserver-coids.inpe.br/queimadas/queimadas/area_queimada/colecao2/tif/ |
+| Clima (precipitação, umidade, temperatura, radiação, vento) | NASA POWER: https://power.larc.nasa.gov/ (pacote `nasapower`) |
+| Limites dos biomas (IBGE, 2019) | pacote `geobr`: https://github.com/ipeaGIT/geobr |
