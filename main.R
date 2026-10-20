@@ -383,3 +383,10 @@ cmp_inc$inc$balance_year; cmp_inc$total$balance_year             # balanco anual
 saveRDS(list(inc = cmp_inc$inc[c("balance_year", "metrics", "flux_monthly")], total = cmp_inc$total[c("balance_year", "metrics", "flux_monthly")]),
         "output/compare_increment.rds")
 plot_increment(cmp_inc, "figs_increment")   # series, dispersoes (anual, mensal, celula x mes) e resumo de r
+
+# 9b. Fogo e desmatamento x incremento do OCO-2 (LNLGIS - IS) e x net_flux total (mesmas celulas x mes) -----------------------------
+fire   <- readRDS("data/fire/aq1km_cell_month.rds"); prodes <- readRDS("data/prodes/prodes_cell_year.rds")
+inc_dist <- increment_disturbance(df0, inc, full_lnlgis, biomas, fire, prodes, prodes_cov)
+inc_dist$fire_inc$pooled; inc_dist$def_inc$pooled          # rho (IC95%) de fogo e desmatamento x delta, incremento e diferenca
+saveRDS(inc_dist, "output/increment_disturbance.rds")
+plot_increment_disturbance(inc_dist, "figs_increment/inc_disturbance_rho.png")

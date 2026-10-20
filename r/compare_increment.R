@@ -147,3 +147,43 @@ plot_increment <- function(cmp, out_dir = "figs_increment") {
   save(p6, "inc_r_summary.png", 8, 7)
   invisible(list(p1, p2, p3, p4, p5, p6))
 }
+
+#' Associacao do incremento (LNLGIS - IS) e do net_flux total do LNLGIS com fogo e desmatamento
+#' Repete a analise da secao 7.5 do main (compare_disturbance) com tres series de fluxo anual por celula x ano:
+#' o delta (est), a referencia (incremento ou total) e a diferenca (estimado - referencia), nas MESMAS celulas x mes.
+#' @param df0 saida de agg_xco2_flux() filtrada, sem colunas net_flux/land_flux/ocean_flux/fossil_flux
+#' @param inc saida de mip_increment(); @param full_ref net_flux do LNLGIS por celula x mes
+#' @param fire,prodes listas salvas por aq1km_aggregate() e prodes_aggregate(); @param prodes_cov biomas x anos com dado no PRODES
+#' @return lista: fire_inc, fire_tot, def_inc, def_tot (saidas de compare_disturbance) e annual_inc, annual_tot
+increment_disturbance <- function(df0, inc, full_ref, biomes, fire, prodes, prodes_cov, years = 2015:2023, min_months = 3, min_years = 3, ...) {
+  d <- merge(df0, inc[, c("lon", "lat", "year", "month", "inc_mean", "inc_sd")], by = c("lon", "lat", "year", "month"))
+  d <- merge(d, full_ref[, c("lon", "lat", "year", "month", "net_flux")], by = c("lon", "lat", "year", "month"))
+  d_inc <- d; d_inc$net_flux <- d$inc_mean; d_inc$net_flux_sd <- d$inc_sd
+  d_tot <- d
+  ann <- function(x) suppressMessages(map_flux_annual(x, biomes = biomes, years = years, min_days = 1, min_months = min_months, min_years = min_years, plot = FALSE, ...))
+  a_inc <- ann(d_inc)$annual; a_tot <- ann(d_tot)$annual
+  cd <- function(a, dist, value, label, coverage = NULL) suppressMessages(compare_disturbance(a, dist, value = value, label = label, coverage = coverage, area_land = fire$land))
+  list(fire_inc = cd(a_inc, fire$annual, "burned_km2", "Burned area"), fire_tot = cd(a_tot, fire$annual, "burned_km2", "Burned area"),
+       def_inc = cd(a_inc, prodes$cell, "def_km2", "Deforestation", prodes_cov), def_tot = cd(a_tot, prodes$cell, "def_km2", "Deforestation", prodes_cov),
+       annual_inc = a_inc, annual_tot = a_tot)
+}
+
+#' Figura: correlacao de Spearman (e IC95%) de fogo e desmatamento com o delta, o incremento (LNLGIS - IS) e o total (LNLGIS)
+#' @param r saida de increment_disturbance()
+plot_increment_disturbance <- function(r, out = "figs_increment/inc_disturbance_rho.png") {
+  library(ggplot2)
+  en <- c("Brasil" = "Brazil", "Amazônia" = "Amazon", "Caatinga" = "Caatinga", "Cerrado" = "Cerrado", "Mata Atlântica" = "Atlantic Forest", "Pampa" = "Pampa", "Pantanal" = "Pantanal")
+  g <- function(x, dist) { p <- x$pooled; p <- p[p$var != "bias", c("group", "var", "rho", "rho_lo", "rho_hi")]; p$dist <- dist; p }
+  mk <- function(a, b, dist) { pa <- g(a, dist); pb <- g(b, dist)
+    pa$serie <- ifelse(pa$var == "est", "Estimated (delta)", "LNLGIS − IS (OCO-2 increment)"); pb <- pb[pb$var == "ref", ]; pb$serie <- "LNLGIS (total)"; rbind(pa, pb) }
+  d <- rbind(mk(r$fire_inc, r$fire_tot, "Burned area"), mk(r$def_inc, r$def_tot, "Deforestation"))
+  d$group <- factor(unname(en[d$group]), levels = unname(en)); d$serie <- factor(d$serie, levels = c("Estimated (delta)", "LNLGIS (total)", "LNLGIS − IS (OCO-2 increment)"))
+  p <- ggplot(d, aes(group, rho, fill = serie)) + geom_hline(yintercept = 0, colour = "grey50") + geom_col(position = position_dodge(0.8), width = 0.75) +
+    geom_errorbar(aes(ymin = rho_lo, ymax = rho_hi), position = position_dodge(0.8), width = 0.25, linewidth = 0.3) +
+    facet_wrap(~dist, ncol = 1) + scale_fill_manual(values = c("Estimated (delta)" = "#0B6E6E", "LNLGIS (total)" = "#4D4D4D", "LNLGIS − IS (OCO-2 increment)" = "#D55E00")) +
+    labs(x = NULL, y = expression("Spearman correlation ("*rho*") with annual flux"), fill = NULL) + theme_bw(base_size = 10, base_family = "Times New Roman") +
+    theme(legend.position = "bottom", panel.grid.minor = element_blank(), strip.background = element_rect(fill = "grey92"), strip.text = element_text(face = "bold"),
+          axis.text.x = element_text(angle = 25, hjust = 1))
+  dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
+  ragg::agg_png(out, width = 9, height = 7, units = "in", res = 300); print(p); grDevices::dev.off(); invisible(p)
+}
