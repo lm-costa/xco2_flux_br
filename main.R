@@ -382,3 +382,4 @@ cmp_inc$inc$metrics; cmp_inc$total$metrics                       # celula x mes:
 cmp_inc$inc$balance_year; cmp_inc$total$balance_year             # balanco anual (Tg C)
 saveRDS(list(inc = cmp_inc$inc[c("balance_year", "metrics", "flux_monthly")], total = cmp_inc$total[c("balance_year", "metrics", "flux_monthly")]),
         "output/compare_increment.rds")
+plot_increment(cmp_inc, "figs_increment")   # series, dispersoes (anual, mensal, celula x mes) e resumo de r
