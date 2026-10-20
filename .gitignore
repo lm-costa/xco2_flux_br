@@ -12,3 +12,4 @@ nasa_power_data/
 SIF/
 .RData
 .positai
+output/metrics_*.rds
