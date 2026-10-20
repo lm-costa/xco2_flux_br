@@ -370,3 +370,15 @@ met <- mmm$metrics
 plot_models_flux(mmm$monthly,  met[met$escala == "mensal"  & met$nivel == "biomas (pooled)", ], "figs_manuscript/supp_model_monthly.png")
 plot_models_flux(mmm$seasonal, met[met$escala == "sazonal" & met$nivel == "biomas (pooled)", ], "figs_manuscript/supp_model_seasonal.png", pt_size = 1.6)
 plot_seasonal_cycle(mmm$seasonal, "figs_manuscript/supp_seasonal_cycle.png")
+
+# 9. Comparacao com o incremento do OCO-2 no MIP (LNLGIS - IS) ----------------------------------------------------------------
+#    O delta usa o Xco2 do experimento IS como fundo, entao representa o que o OCO-2 acrescenta a rede in situ. A referencia
+#    coerente e a diferenca LNLGIS - IS (grupo a grupo, 16 grupos), e nao o net_flux total do LNLGIS.
+inc <- mip_increment("data/Fluxes_MIP_completo", exp_a = "LNLGIS", exp_b = "IS")
+full_lnlgis <- readr::read_rds(list.files("data/Fluxes_MIP", full.names = TRUE)) |> dplyr::mutate(lon = round(lon, 4), lat = round(lat, 4))
+df0 <- df_comp |> dplyr::select(-dplyr::any_of(c("net_flux", "land_flux", "ocean_flux", "fossil_flux", "time", "datetime")))
+cmp_inc <- compare_increment(df0, inc, full_lnlgis, biomas, min_days = 1, ref_factor = 1)
+cmp_inc$inc$metrics; cmp_inc$total$metrics                       # celula x mes: incremento vs total
+cmp_inc$inc$balance_year; cmp_inc$total$balance_year             # balanco anual (Tg C)
+saveRDS(list(inc = cmp_inc$inc[c("balance_year", "metrics", "flux_monthly")], total = cmp_inc$total[c("balance_year", "metrics", "flux_monthly")]),
+        "output/compare_increment.rds")
