@@ -121,14 +121,28 @@ df_n |>
 #       3. Fluxes estimative               #
 ############################################
 
+# f_a (Eq. 3) depende da profundidade da PBL, como sugerido por D. Baker: fração da coluna de 10 km ocupada pela PBL
+# (profundidades do ECMWF por estação, von Engeln e Teixeira, 2013), 0.05 na Amazônia e 0.18 nos demais biomas, multiplicada por 2
+# (o sinal está concentrado na metade de baixo da coluna, pois o IS cancela a parte de cima). tau = 2 dias, como no texto do artigo.
+fa_amazon <- 0.05; fa_other <- 0.18; fa_mult <- 2; tau_days <- 2
+
+biome_of <- function(xy) {                       # bioma de cada sondagem; fora dos biomas usa o valor dos demais
+  s2 <- sf::sf_use_s2(FALSE); on.exit(sf::sf_use_s2(s2))
+  b <- sf::st_make_valid(sf::st_transform(biomas, 4326))
+  hit <- sf::st_intersects(sf::st_as_sf(xy[, c('lon', 'lat')], coords = c('lon', 'lat'), crs = 4326), b)
+  idx <- vapply(hit, function(i) if (length(i)) i[1] else NA_integer_, integer(1))
+  as.character(sf::st_drop_geometry(b)$name_biome)[idx]
+}
+df_n$biome <- biome_of(df_n)
+df_n$flux_fraction <- fa_mult * ifelse(df_n$biome %in% 'Amazônia', fa_amazon, fa_other)   # 0.10 (Amazônia) e 0.36
+
 df_n <- fco2_from_delta(
   df_n,
   delta='delta',
   sigma_delta = 'sigma',
   method = 'massa',
-  tau_days = 2.5,
-  flux_fraction = .2
-
+  tau_days = tau_days,
+  flux_fraction = df_n$flux_fraction   # vetor: um f_a por sondagem (o fluxo e a incerteza escalam com ele)
 )
 
 

@@ -24,7 +24,7 @@ NetCDF do MIP (por submission × experimento)
 ensemble__<EXP>.rds   (obs + média/dp do ensemble)     [1 linha = 1 sondagem]
    │  delta = xco2 − xco2_ens_mean   (experimento IS)
    ▼
-delta → fluxo pontual por sondagem                      (balanço de massa: f_a = 0,2; τ = 2,5 dias)
+delta → fluxo pontual por sondagem                      (balanço de massa: f_a = 0,05 na Amazônia e 0,18 nos demais biomas, vezes 2; τ = 2 dias)
    │  agg_xco2_flux()   (célula do net_flux × mês)
    ▼
 teste_comp.rds   (estimado + net_flux, 1 linha = célula × mês)
@@ -44,7 +44,7 @@ EnsMean__<EXP>.rds, EnsStd__<EXP>.rds                   [1 linha = célula × m�
 2. **Ensemble (`build_ensemble`).** Combina as submissions de um experimento e gera, por sondagem, a média (`xco2_ens_mean`) e o desvio padrão (`xco2_ens_sd`) do XCO2 simulado, junto com o XCO2 observado (`xco2`).
 3. **Extração dos fluxos (`flux_extractor`).** Lê os fluxos gradeados (1°, `net_flux`) e salva a média do ensemble (`EnsMean`) e o desvio entre membros (`EnsStd`) por célula × mês.
 4. **Delta e fluxo pontual (`fco2_from_delta`).** `delta = xco2 − xco2_ens_mean`, com o simulado do experimento **IS**. O delta vira fluxo por sondagem por um balanço de massa na coluna, sem vento:
-   `n_dry = (Ps/g − TCWV) / M_ar` (ar seco por m², com a pressão de superfície e o vapor d'água da coluna de cada sondagem), `dM = f_a · delta · 1e-6 · n_dry · M_C` e `fco2 = dM / τ` (g C m⁻² d⁻¹). No `main.R` usa-se `f_a = 0,2` (`flux_fraction`) e `τ = 2,5 dias` (`tau_days`). O fluxo escala com `f_a/τ`: os dois parâmetros não são separáveis pelos dados e controlam a amplitude, não a correlação com o MIP.
+   `n_dry = (Ps/g − TCWV) / M_ar` (ar seco por m², com a pressão de superfície e o vapor d'água da coluna de cada sondagem), `dM = f_a · delta · 1e-6 · n_dry · M_C` e `fco2 = dM / τ` (g C m⁻² d⁻¹). No `main.R` usa-se `f_a` por bioma, 0,05 na Amazônia e 0,18 nos demais (fração da coluna de 10 km ocupada pela PBL, com a profundidade da PBL do ECMWF; von Engeln e Teixeira, 2013), multiplicado por 2 (`flux_fraction` = 0,10 e 0,36), e `τ` = 2 dias.
 5. **Agregação (`agg_xco2_flux`).** Cada sondagem vai para a célula do fluxo mais próxima (centro da célula) e para o mês do seu `datetime`. O método padrão é `dois_estagios`: média por célula × dia e depois média dos dias do mês, de modo que cada dia pesa igual. `n_days` é o número de dias independentes; `<var>_mean`, `<var>_sd` e `<var>_sem` são as estatísticas por célula × mês.
 6. **Comparação (`compare_flux`, `map_flux_annual`).** Estimado × `net_flux` no Brasil e por bioma: correlação, RMSE, viés, balanço mensal/anual/total e regressão célula a célula. Os mapas anuais ficam em `map_flux_annual()`.
 7. **Método beta (legado: `beta_xco2_flux`, `compare_beta`, `balance_beta`).** Tendência do XCO2 por célula e ano convertida em fluxo, reamostrada para 1° e comparada com o estimado e o `net_flux`. É a abordagem da primeira versão do trabalho, mantida só como referência (o código fica comentado no `main.R`). A análise com SIF foi retirada do projeto.
@@ -69,7 +69,7 @@ Padrões observados nos scripts:
 | `EnsMean__<EXP>.rds` (ex.: `data/Fluxes_MIP_completo/EnsMean__LNLGIS.rds`) | `net_flux` médio do ensemble para o experimento `<EXP>` | 1 linha por célula × mês |
 | `EnsStd__<EXP>.rds` (ex.: `data/Fluxes_MIP_completo/EnsStd__LNLGIS.rds`) | desvio padrão entre membros do `net_flux` do experimento `<EXP>` (candidato a `ref_sigma`) | 1 linha por célula × mês |
 | `comparison.rds` | saída de `agg_xco2_flux()` da versão anterior (τ = 30 d, sem `f_a`) | 1 linha por célula × mês |
-| `comparison_new.rds` | saída de `agg_xco2_flux()` com `f_a = 0,2` e `τ = 2,5 d` (base das análises atuais) | 1 linha por célula × mês |
+| `comparison_new.rds` | saída de `agg_xco2_flux()` com `f_a` por bioma (0,05 na Amazônia e 0,18 nos demais, vezes 2) e `τ = 2 d` (base das análises atuais; antes `f_a = 0,2` e `τ = 2,5 d`) | 1 linha por célula × mês |
 | `data/fire/aq1km_cell_month.rds` | área queimada do AQ1KM agregada em células de 1° (listas `monthly`, `annual`, `land`, `total_biome`) | célula × mês / ano |
 | `data/prodes/prodes_cell_year.rds` | desmatamento do PRODES agregado em células de 1° (listas `cell`, `total`) | célula × ano |
 | `data/nasa_power/power_cell_month.rds` | NASA POWER mensal por célula (prec, qg, rh, temp, ws) | célula × mês |
@@ -156,7 +156,7 @@ Ordem de uso típica:
 
 ```r
 df_n  <- fco2_from_delta(df_n, delta = "delta", sigma_delta = "sigma", method = "massa",
-                         tau_days = 2.5, flux_fraction = 0.2)
+                         tau_days = 2, flux_fraction = df_n$flux_fraction)   # f_a por bioma (vetor), ver a seção 3 do main.R
 comp  <- agg_xco2_flux(df_n, df_flux, vars = "fco2", method = "dois_estagios", sigma = "sigma_f",
                        out_file = "data/comparison_new.rds")
 res   <- compare_flux(comp, biomes = biomas, years = 2015:2023, ref_sigma = "net_flux_sd")
@@ -209,7 +209,7 @@ Do mensal para o anual e o total: a versão `indep` soma em quadratura (`sqrt(Σ
 
 **O que a incerteza não cobre**
 
-- Fração da coluna `f_a` (0,2) e tempo de residência `τ` (2,5 dias): são hipóteses, não erros aleatórios, e não entram na incerteza propagada (a menos que se informe `sigma_flux_fraction` e `sigma_tau_days`). A magnitude do fluxo escala com `f_a/τ`.
+- Fração da coluna `f_a` (0,05 na Amazônia e 0,18 nos demais biomas, vezes 2) e tempo de residência `τ` (2 dias): são hipóteses, não erros aleatórios, e não entram na incerteza propagada (a menos que se informe `sigma_flux_fraction` e `sigma_tau_days`). A magnitude do fluxo escala com `f_a/τ`.
 - Erro sistemático do XCO2 simulado do experimento IS (viés do modelo de transporte), que entra no delta como se fosse sinal.
 - Unidade do `net_flux` (`ref_factor`).
 - O método beta (legado) não tem propagação de incerteza; só há o p-valor da regressão, que fica inflado por autocorrelação.
@@ -219,7 +219,7 @@ Do mensal para o anual e o total: a versão `indep` soma em quadratura (`sqrt(Σ
 ## 7. Ressalvas abertas
 
 - A magnitude do fluxo estimado depende de `f_a` e `τ` (constantes no espaço e no tempo, sem calibração).
-- Com `f_a` por bioma (`main_pbl.R`), o balanço estimado fica mais perto do MIP na Amazônia (razão 1,98 → 1,29), na Caatinga (0,49 → 1,09) e no Pantanal (0,45 → 1,02), mas o RMSE sobe na maioria dos biomas, o r não muda dentro de cada bioma e o Brasil continua em 3,7 vezes o MIP. O `τ` do código era 2,5 d e o texto do artigo diz 2 d.
+- Com `f_a` por bioma (seção 3 do `main.R`), em vez de `f_a` = 0,2 e `τ` = 2,5 d, o balanço estimado fica mais perto do MIP na Amazônia (razão 1,98 → 1,29), na Caatinga (0,49 → 1,09) e no Pantanal (0,45 → 1,02), mas o RMSE sobe na maioria dos biomas, o r não muda dentro de cada bioma e o Brasil continua em 3,7 vezes o MIP. O `τ` do código era 2,5 d e o texto do artigo diz 2 d.
 - O transporte atmosférico não é modelado: o ΔXCO2 de uma célula reflete também os fluxos a montante. A concordância melhora em médias anuais e regionais.
 - Sinal e ruído: com os parâmetros usados, um fluxo de 0,3 g C m⁻² d⁻¹ equivale a cerca de 0,9 ppm de ΔXCO2, parecido com a incerteza de uma sondagem (≈ 1 ppm). Um deslocamento do fundo (≈ +0,27 ppm) é indistinguível de uma fonte líquida persistente.
 - Amostragem: só há células × meses com sondagens válidas (cerca de 33% da área e do tempo do Brasil, 22% na Amazônia); os balanços anuais se referem às células pareadas, não aos biomas inteiros.
@@ -240,7 +240,6 @@ Todas rodam a partir de `data/comparison_new.rds` e estão nas seções do `main
 | 7 | fogo (AQ1KM) e desmatamento (PRODES) agregados em 1°, mapas anuais e associação (Spearman, IC por bootstrap) com os fluxos | `data/fire/`, `data/prodes/`, `figs_disturbance/`, `output/compare_*.rds` |
 | 8 e 8b | comparação modelo a modelo do MIP (balanço anual, médias mensais e ciclo sazonal) | `output/compare_models*.rds`, `figs_manuscript/` |
 | 9 e 9b | **exploratório:** comparação com o incremento do OCO-2, `LNLGIS − IS` (grupo a grupo, 16 grupos), e sua associação com fogo e desmatamento | `output/compare_increment.rds`, `output/increment_disturbance.rds`, `figs_increment/` |
-| `main_pbl.R` | **`f_a` por bioma (profundidade da PBL):** refaz as seções 3 a 5 e 8 com `f_a` = 0,05 na Amazônia e 0,18 nos demais biomas, multiplicado por 2 (`flux_fraction` = 0,10 e 0,36), e `τ` = 2 dias; compara com o esquema atual (`f_a` = 0,2, `τ` = 2,5 d) | `output/pbl_vs_current.csv`, `figs_pbl/`, `figs_manuscript_pbl/` |
 
 As figuras do artigo e do material suplementar estão em `figs_manuscript/`, `figs_climate/`, `figs_disturbance/` e `figs_increment/`. O teste com o incremento (seções 9 e 9b) ainda é uma hipótese: depende de como o incremento é definido e não está no texto principal do artigo.
 
