@@ -219,6 +219,7 @@ Do mensal para o anual e o total: a versão `indep` soma em quadratura (`sqrt(Σ
 ## 7. Ressalvas abertas
 
 - A magnitude do fluxo estimado depende de `f_a` e `τ` (constantes no espaço e no tempo, sem calibração).
+- Com `f_a` por bioma (`main_pbl.R`), o balanço estimado fica mais perto do MIP na Amazônia (razão 1,98 → 1,29), na Caatinga (0,49 → 1,09) e no Pantanal (0,45 → 1,02), mas o RMSE sobe na maioria dos biomas, o r não muda dentro de cada bioma e o Brasil continua em 3,7 vezes o MIP. O `τ` do código era 2,5 d e o texto do artigo diz 2 d.
 - O transporte atmosférico não é modelado: o ΔXCO2 de uma célula reflete também os fluxos a montante. A concordância melhora em médias anuais e regionais.
 - Sinal e ruído: com os parâmetros usados, um fluxo de 0,3 g C m⁻² d⁻¹ equivale a cerca de 0,9 ppm de ΔXCO2, parecido com a incerteza de uma sondagem (≈ 1 ppm). Um deslocamento do fundo (≈ +0,27 ppm) é indistinguível de uma fonte líquida persistente.
 - Amostragem: só há células × meses com sondagens válidas (cerca de 33% da área e do tempo do Brasil, 22% na Amazônia); os balanços anuais se referem às células pareadas, não aos biomas inteiros.
@@ -239,6 +240,7 @@ Todas rodam a partir de `data/comparison_new.rds` e estão nas seções do `main
 | 7 | fogo (AQ1KM) e desmatamento (PRODES) agregados em 1°, mapas anuais e associação (Spearman, IC por bootstrap) com os fluxos | `data/fire/`, `data/prodes/`, `figs_disturbance/`, `output/compare_*.rds` |
 | 8 e 8b | comparação modelo a modelo do MIP (balanço anual, médias mensais e ciclo sazonal) | `output/compare_models*.rds`, `figs_manuscript/` |
 | 9 e 9b | **exploratório:** comparação com o incremento do OCO-2, `LNLGIS − IS` (grupo a grupo, 16 grupos), e sua associação com fogo e desmatamento | `output/compare_increment.rds`, `output/increment_disturbance.rds`, `figs_increment/` |
+| `main_pbl.R` | **`f_a` por bioma (profundidade da PBL):** refaz as seções 3 a 5 e 8 com `f_a` = 0,05 na Amazônia e 0,18 nos demais biomas, multiplicado por 2 (`flux_fraction` = 0,10 e 0,36), e `τ` = 2 dias; compara com o esquema atual (`f_a` = 0,2, `τ` = 2,5 d) | `output/pbl_vs_current.csv`, `figs_pbl/`, `figs_manuscript_pbl/` |
 
 As figuras do artigo e do material suplementar estão em `figs_manuscript/`, `figs_climate/`, `figs_disturbance/` e `figs_increment/`. O teste com o incremento (seções 9 e 9b) ainda é uma hipótese: depende de como o incremento é definido e não está no texto principal do artigo.
 
