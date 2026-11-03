@@ -275,6 +275,7 @@ res_climatica <- compare_climate(df_comp,
                        time_scale = "annual",
                        data_dir = "data-raw/nasa_power",
                        download = FALSE,
+                       anom_years = 2015:2023,        # mediana de referência da anomalia: mesmo período da comparação
                        out_dir = "data/nasa_power",   # salva o POWER mensal por célula, antes do match com df_comp
                        map_args = list(
                          south_america = south_america,

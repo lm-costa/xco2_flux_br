@@ -39,6 +39,7 @@
 #' @param min_years Anos mínimos por célula para a anomalia climática e para a correlação.
 #' @param min_days  Mínimo de dias com sondagem na célula x mês (usa `n_days`, se existir).
 #' @param years     Anos usados só na COMPARAÇÃO (a anomalia climática usa a série toda do POWER). NULL = todos.
+#' @param anom_years Anos do POWER que definem a mediana de referência da anomalia climática (ex.: 2015:2023). NULL = série toda baixada.
 #' @param drop_outside Exclui células fora dos biomas.
 #' @param plot,maps Gera scatter e mapas (ggplot2). Os mapas aceitam as mesmas opções de estilo
 #'                  de map_flux_annual() em `map_args` (south_america, map_theme, basemap,
@@ -69,6 +70,7 @@ compare_climate <- function(df_comp,
                             min_years    = 5,
                             min_days     = 1,
                             years        = NULL,
+                            anom_years   = NULL,
                             drop_outside = TRUE,
                             plot         = TRUE,
                             maps         = TRUE,
@@ -136,6 +138,7 @@ compare_climate <- function(df_comp,
     message("NASA POWER mensal salvo em '", file.path(out_dir, out_file), "'.")
   }
   pm <- pm[ckey(pm) %in% common, c("lon", "lat", "year", "month", vars), drop = FALSE]
+  if (!is.null(anom_years)) pm <- pm[pm$year %in% anom_years, ]   # a mediana da anomalia vem só desses anos
 
   # ---- 4) anomalia só do CLIMA (série toda do POWER); fluxo usado direto; datas comuns --
   keyb <- c("lon", "lat", if (has_biome) "biome")
