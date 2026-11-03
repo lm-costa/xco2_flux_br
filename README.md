@@ -273,3 +273,11 @@ figs*/            figuras (figs, figs_climate, figs_disturbance, figs_increment,
 | Área queimada (AQ1KM, Coleção 2) | INPE Queimadas: https://dataserver-coids.inpe.br/queimadas/queimadas/area_queimada/colecao2/tif/ |
 | Clima (precipitação, umidade, temperatura, radiação, vento) | NASA POWER: https://power.larc.nasa.gov/ (pacote `nasapower`) |
 | Limites dos biomas (IBGE, 2019) | pacote `geobr`: https://github.com/ipeaGIT/geobr |
+
+### Testes de sensibilidade (comentarios de D. Baker)
+
+Pasta `sensitivity/` (scripts rodados localmente; os caminhos de `source()` e do `.rds` temporario precisam ser ajustados):
+`1_flag_join.R` junta o `assimilate_flag` do `OCO2.nc` as sondagens; `2_flag_sensitivity.R` refaz a estimativa com todas as sondagens, so flag 1-2 e so flag 0
+(`output/sens_assimilate_flag.csv`); `3_background_by_model.R` usa o IS de cada modelo como fundo e compara com o LNLGIS do mesmo modelo
+(`output/sens_background_by_model.csv`). `fig3_biomes_map.R` gera o mapa de biomas do artigo.
+Resultado: as sondagens com flag 0 (44%) concentram o offset de +0,27 ppm e o vies positivo; o IS de cada modelo nao melhora o acordo em media.

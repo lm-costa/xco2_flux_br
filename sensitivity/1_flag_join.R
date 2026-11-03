@@ -1,0 +1,12 @@
+suppressMessages(library(dplyr)); setwd("D:/R/xco2_flux_br")
+nc <- ncdf4::nc_open("data-raw/OCO2.nc")
+fl <- data.frame(lon = as.numeric(ncdf4::ncvar_get(nc, "longitude")), lat = as.numeric(ncdf4::ncvar_get(nc, "latitude")), time = as.numeric(ncdf4::ncvar_get(nc, "time")), flag = as.integer(ncdf4::ncvar_get(nc, "assimilate_flag")))
+ncdf4::nc_close(nc)
+cat("global flags:\n"); print(table(fl$flag, useNA = "ifany"))
+ens <- readRDS("data/xco2_pre_processed/ensemble/ensemble__IS.rds")
+fl$k <- paste(fl$time, round(fl$lon, 4), round(fl$lat, 4)); ens$k <- paste(ens$time, round(ens$lon, 4), round(ens$lat, 4))
+cat("dup keys no nc:", sum(duplicated(fl$k)), " ens:", sum(duplicated(ens$k)), "\n")
+m <- match(ens$k, fl$k); cat("sondagens sem correspondencia:", sum(is.na(m)), "de", nrow(ens), "\n")
+ens$assimilate_flag <- fl$flag[m]
+cat("flags no Brasil (ensemble IS):\n"); print(table(ens$assimilate_flag, useNA = "ifany")); print(round(prop.table(table(ens$assimilate_flag)), 3))
+ens$k <- NULL; saveRDS(ens, "C:/Users/luism/AppData/Local/Temp/ens_flag.rds")

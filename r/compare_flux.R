@@ -318,7 +318,7 @@ make_flux_plots <- function(P, balance_total, flux_monthly, metrics, ref = "net_
                    panel.grid.major = ggplot2::element_line(colour = "grey90", linewidth = 0.3),
                    strip.text = ggplot2::element_text(face = "bold", hjust = 0),
                    legend.position = "top")
-  col_scale <- ggplot2::scale_colour_manual(values = c(Estimated = unname(.flux_cols["est"]),
+  col_scale <- ggplot2::scale_colour_manual(values = c(`Our estimate` = unname(.flux_cols["est"]),
                                                        setNames(unname(.flux_cols["ref"]), ref_lab)))
 
   # 1) dispersão estimado x referência, por grupo (Brasil + biomas)
@@ -340,17 +340,17 @@ make_flux_plots <- function(P, balance_total, flux_monthly, metrics, ref = "net_
                        colour = "grey15", inherit.aes = FALSE) +
     ggplot2::facet_wrap(~ grp, scales = "free") +
     ggplot2::labs(x = bquote(.(ref_lab) ~ "(" * .(unit) * ")"),
-                  y = bquote("Estimated flux (" * .(unit) * ")")) +
+                  y = bquote("Our estimated flux (" * .(unit) * ")")) +
     base_theme
 
   # 2) balanço total (Tg C) por grupo
   bt <- balance_total; bt$grp <- fac(bt$group)
   long_tot <- rbind(
-    data.frame(grp = bt$grp, series = "Estimated", TgC = bt$est_TgC,
+    data.frame(grp = bt$grp, series = "Our estimate", TgC = bt$est_TgC,
                s_in = bt$est_sigma_indep_TgC, s_out = bt$est_sigma_corr_TgC),
     data.frame(grp = bt$grp, series = ref_lab, TgC = bt$ref_TgC,
                s_in = bt$ref_sigma_indep_TgC, s_out = bt$ref_sigma_corr_TgC))
-  long_tot$series <- factor(long_tot$series, levels = c("Estimated", ref_lab))
+  long_tot$series <- factor(long_tot$series, levels = c("Our estimate", ref_lab))
   dodge <- ggplot2::position_dodge(width = 0.75)
   ref_has_sig <- any(is.finite(long_tot$s_out[long_tot$series == ref_lab]))
   p_balance <- gg(long_tot, aes(grp, TgC, fill = series)) +
@@ -364,7 +364,7 @@ make_flux_plots <- function(P, balance_total, flux_monthly, metrics, ref = "net_
                              width = if (sigma_bars == "indep") 0.25 else 0,
                              colour = "grey15", linewidth = if (sigma_bars == "indep") 0.4 else 1.1,
                              na.rm = TRUE) } +
-    ggplot2::scale_fill_manual(values = c(Estimated = unname(.flux_cols["est"]),
+    ggplot2::scale_fill_manual(values = c(`Our estimate` = unname(.flux_cols["est"]),
                                           setNames(unname(.flux_cols["ref"]), ref_lab))) +
     ggplot2::labs(x = NULL, y = "Tg C (sum over paired cells and months)",
                   fill = NULL) +
@@ -375,11 +375,11 @@ make_flux_plots <- function(P, balance_total, flux_monthly, metrics, ref = "net_
   if (!is.null(balance_year)) {
     by <- balance_year; by$grp <- fac(by$group)
     long_y <- rbind(
-      data.frame(grp = by$grp, year = by$year, series = "Estimated", TgC = by$est_TgC,
+      data.frame(grp = by$grp, year = by$year, series = "Our estimate", TgC = by$est_TgC,
                  s_in = by$est_sigma_indep_TgC, s_out = by$est_sigma_corr_TgC),
       data.frame(grp = by$grp, year = by$year, series = ref_lab, TgC = by$ref_TgC,
                  s_in = by$ref_sigma_indep_TgC, s_out = by$ref_sigma_corr_TgC))
-    long_y$series <- factor(long_y$series, levels = c("Estimated", ref_lab))
+    long_y$series <- factor(long_y$series, levels = c("Our estimate", ref_lab))
     yrs <- sort(unique(long_y$year))
     p_balance_year <- gg(long_y, aes(factor(year), TgC, fill = series)) +
       ggplot2::geom_hline(yintercept = 0, colour = "grey40", linewidth = 0.3) +
@@ -393,7 +393,7 @@ make_flux_plots <- function(P, balance_total, flux_monthly, metrics, ref = "net_
                                colour = "grey15", linewidth = if (sigma_bars == "indep") 0.35 else 0.9,
                                na.rm = TRUE) } +
       ggplot2::facet_wrap(~ grp, scales = "free_y", ncol = 2) +
-      ggplot2::scale_fill_manual(values = c(Estimated = unname(.flux_cols["est"]),
+      ggplot2::scale_fill_manual(values = c(`Our estimate` = unname(.flux_cols["est"]),
                                             setNames(unname(.flux_cols["ref"]), ref_lab))) +
       ggplot2::labs(x = NULL, y = "Annual balance (Tg C)", fill = NULL) +
       base_theme + ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
@@ -409,11 +409,11 @@ make_flux_plots <- function(P, balance_total, flux_monthly, metrics, ref = "net_
   fm <- merge(grid, fm, by = c("grp", "date"), all.x = TRUE)
   fm <- fm[order(fm$grp, fm$date), ]
   long_f <- rbind(
-    data.frame(grp = fm$grp, date = fm$date, series = "Estimated", flux = fm$est_flux,
+    data.frame(grp = fm$grp, date = fm$date, series = "Our estimate", flux = fm$est_flux,
                lo = fm$est_flux - fm$est_sigma_corr, hi = fm$est_flux + fm$est_sigma_corr),
     data.frame(grp = fm$grp, date = fm$date, series = ref_lab, flux = fm$ref_flux,
                lo = fm$ref_flux - fm$ref_sigma_corr, hi = fm$ref_flux + fm$ref_sigma_corr))
-  long_f$series <- factor(long_f$series, levels = c("Estimated", ref_lab))
+  long_f$series <- factor(long_f$series, levels = c("Our estimate", ref_lab))
   has_sig <- any(is.finite(long_f$lo))
   p_monthly <- gg(long_f, aes(date, flux, colour = series, group = series)) +
     { if (has_sig) ggplot2::geom_ribbon(aes(ymin = lo, ymax = hi, fill = series),
@@ -424,7 +424,7 @@ make_flux_plots <- function(P, balance_total, flux_monthly, metrics, ref = "net_
     ggplot2::geom_point(size = 1.3, na.rm = TRUE) +
     ggplot2::facet_wrap(~ grp, scales = "free_y", ncol = 2) +
     col_scale +
-    ggplot2::scale_fill_manual(values = c(Estimated = unname(.flux_cols["est"]),
+    ggplot2::scale_fill_manual(values = c(`Our estimate` = unname(.flux_cols["est"]),
                                           setNames(unname(.flux_cols["ref"]), ref_lab))) +
     ggplot2::scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
     ggplot2::labs(x = NULL, y = bquote("Mean flux (" * .(unit) * ")"), colour = NULL) +

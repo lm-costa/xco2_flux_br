@@ -1,0 +1,7 @@
+source("C:/Users/luism/AppData/Local/Temp/claude/D--R-xco2-flux-br/aca67c70-3b11-41db-b590-5ec4e323c2af/scratchpad/variant_lib.R")
+ens <- readRDS("C:/Users/luism/AppData/Local/Temp/ens_flag.rds")
+ens <- ens |> mutate(delta = xco2 - xco2_ens_mean, sigma = sqrt(xco2_ens_se^2 + uncertanty^2 + model_error^2))
+r_all <- run_variant(ens); r12 <- run_variant(ens |> filter(assimilate_flag %in% 1:2)); r0 <- run_variant(ens |> filter(assimilate_flag == 0))
+S <- bind_rows(summ(r_all, "todas"), summ(r12, "flag 1-2"), summ(r0, "flag 0"))
+saveRDS(S, "C:/Users/luism/AppData/Local/Temp/sens330.rds"); print(as.data.frame(S |> arrange(group, variant)))
+cat("FIM\n")

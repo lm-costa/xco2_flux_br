@@ -66,7 +66,7 @@ plot_increment <- function(cmp, out_dir = "figs_increment") {
   library(ggplot2); dir.create(out_dir, showWarnings = FALSE)
   en <- c("Brasil" = "Brazil", "Amazônia" = "Amazon", "Caatinga" = "Caatinga", "Cerrado" = "Cerrado", "Mata Atlântica" = "Atlantic Forest", "Pampa" = "Pampa", "Pantanal" = "Pantanal")
   lab_g <- function(x) factor(unname(en[x]), levels = unname(en))
-  nm <- c(est = "Estimated (delta)", inc = "LNLGIS − IS (OCO-2 increment)", tot = "LNLGIS (total)")
+  nm <- c(est = "Our estimate", inc = "LNLGIS − IS (OCO-2 increment)", tot = "LNLGIS (total)")
   cols <- setNames(c("#0B6E6E", "#D55E00", "#4D4D4D"), nm); shp <- setNames(c(16, 17, 15), nm); lty <- setNames(c("solid", "solid", "22"), nm)
   th <- theme_bw(base_size = 10, base_family = "Times New Roman") + theme(legend.position = "bottom", panel.grid.minor = element_blank(),
         strip.background = element_rect(fill = "grey92"), strip.text = element_text(face = "bold"))
@@ -175,12 +175,12 @@ plot_increment_disturbance <- function(r, out = "figs_increment/inc_disturbance_
   en <- c("Brasil" = "Brazil", "Amazônia" = "Amazon", "Caatinga" = "Caatinga", "Cerrado" = "Cerrado", "Mata Atlântica" = "Atlantic Forest", "Pampa" = "Pampa", "Pantanal" = "Pantanal")
   g <- function(x, dist) { p <- x$pooled; p <- p[p$var != "bias", c("group", "var", "rho", "rho_lo", "rho_hi")]; p$dist <- dist; p }
   mk <- function(a, b, dist) { pa <- g(a, dist); pb <- g(b, dist)
-    pa$serie <- ifelse(pa$var == "est", "Estimated (delta)", "LNLGIS − IS (OCO-2 increment)"); pb <- pb[pb$var == "ref", ]; pb$serie <- "LNLGIS (total)"; rbind(pa, pb) }
+    pa$serie <- ifelse(pa$var == "est", "Our estimate", "LNLGIS − IS (OCO-2 increment)"); pb <- pb[pb$var == "ref", ]; pb$serie <- "LNLGIS (total)"; rbind(pa, pb) }
   d <- rbind(mk(r$fire_inc, r$fire_tot, "Burned area"), mk(r$def_inc, r$def_tot, "Deforestation"))
-  d$group <- factor(unname(en[d$group]), levels = unname(en)); d$serie <- factor(d$serie, levels = c("Estimated (delta)", "LNLGIS (total)", "LNLGIS − IS (OCO-2 increment)"))
+  d$group <- factor(unname(en[d$group]), levels = unname(en)); d$serie <- factor(d$serie, levels = c("Our estimate", "LNLGIS (total)", "LNLGIS − IS (OCO-2 increment)"))
   p <- ggplot(d, aes(group, rho, fill = serie)) + geom_hline(yintercept = 0, colour = "grey50") + geom_col(position = position_dodge(0.8), width = 0.75) +
     geom_errorbar(aes(ymin = rho_lo, ymax = rho_hi), position = position_dodge(0.8), width = 0.25, linewidth = 0.3) +
-    facet_wrap(~dist, ncol = 1) + scale_fill_manual(values = c("Estimated (delta)" = "#0B6E6E", "LNLGIS (total)" = "#4D4D4D", "LNLGIS − IS (OCO-2 increment)" = "#D55E00")) +
+    facet_wrap(~dist, ncol = 1) + scale_fill_manual(values = c("Our estimate" = "#0B6E6E", "LNLGIS (total)" = "#4D4D4D", "LNLGIS − IS (OCO-2 increment)" = "#D55E00")) +
     labs(x = NULL, y = expression("Spearman correlation ("*rho*") with annual flux"), fill = NULL) + theme_bw(base_size = 10, base_family = "Times New Roman") +
     theme(legend.position = "bottom", panel.grid.minor = element_blank(), strip.background = element_rect(fill = "grey92"), strip.text = element_text(face = "bold"),
           axis.text.x = element_text(angle = 25, hjust = 1))
